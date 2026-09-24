@@ -112,3 +112,36 @@ réponses et de piloter la partie.
 - `supabase/functions/jeu/bundle.ts` — les trois réunis, **fichier engendré**,
   reconstruit par `node scripts/bundle.mjs`.
 - `tests/` — les parties rejouées automatiquement : `npm test`.
+
+---
+
+## Étape 9 — Mettre à jour les deux classements
+
+SQL Editor → New query → collez `supabase/maj-vues.sql` → **Run**.
+Ça ajoute le « meilleur score » au classement général. Aucune donnée n'est touchée.
+
+## Étape 10 — Mettre le site en ligne (Netlify)
+
+1. Allez sur **netlify.com** → **Sign up** → **GitHub**, et autorisez l'accès.
+2. **Add new site** → **Import an existing project** → **GitHub**.
+3. Choisissez le dépôt **quizz-constance** (autorisez Netlify à le voir s'il le demande).
+4. Ne changez rien : le fichier `netlify.toml` indique déjà quoi publier (`web`).
+5. **Deploy**.
+
+Au bout d'une minute, le site est en ligne à une adresse du type
+`https://quelque-chose-12345.netlify.app`. Vous pouvez la renommer dans
+**Site configuration → Change site name** (par exemple `quizz-constance`).
+
+### Les trois adresses
+
+| Qui | Adresse |
+|---|---|
+| Maître du jeu | `https://…netlify.app/` |
+| Écran public (TV) | `https://…netlify.app/ecran.html` |
+| Joueurs | `https://…netlify.app/joueur.html` (ou le QR code) |
+
+L'écran public n'a pas besoin de code : il suit tout seul la dernière partie créée.
+
+### À chaque modification
+
+Un commit poussé sur GitHub redéploie le site tout seul, en une minute.
