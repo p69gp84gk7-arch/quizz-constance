@@ -5,6 +5,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname);
 const DIR = path.join(ROOT, 'supabase/functions/jeu');
@@ -43,5 +44,10 @@ ${actions}
 /* ================= ENTRÉE (index.ts) ================= */
 ${entry}`;
 
-fs.writeFileSync(path.join(DIR, 'bundle.ts'), out.replace(/\n{4,}/g, '\n\n\n'));
-console.log('bundle.ts écrit : ' + out.split('\n').length + ' lignes');
+// Empreinte du contenu : le serveur annonce cette version, on sait toujours ce qui est déployé
+let texte = out.replace(/\n{4,}/g, '\n\n\n');
+const empreinte = new Date().toISOString().slice(0, 10) + '-' + crypto.createHash('sha1').update(texte).digest('hex').slice(0, 6);
+texte = texte.replace(/const BUILD = '[^']*';/, "const BUILD = '" + empreinte + "';");
+fs.writeFileSync(path.join(DIR, 'bundle.ts'), texte);
+console.log('version : ' + empreinte);
+console.log('bundle.ts écrit : ' + texte.split('\n').length + ' lignes');

@@ -210,6 +210,21 @@ export function createActions(db) {
     p = p || {};
     switch (action) {
 
+      /** Diagnostic : ce que le serveur voit réellement de la banque de questions. */
+      case 'diag': {
+        const t0 = Date.now();
+        const qs = await allQuestions(COLS_LEGERES);
+        const themes = {};
+        qs.forEach(q => { if (q.question) themes[q.theme] = (themes[q.theme] || 0) + 1; });
+        return {
+          questions: qs.length,
+          utilisables: qs.filter(q => q.question && String(q.actif || 'oui').toLowerCase() !== 'non').length,
+          themes: Object.keys(themes).length,
+          colonnes: qs[0] ? Object.keys(qs[0]) : [],
+          ms: Date.now() - t0,
+        };
+      }
+
       /** Heure du serveur — et petit réveil de la base au passage. */
       case 'time': {
         await db.from('app_state').select('*').eq('id', 1).maybeSingle();
