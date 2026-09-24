@@ -173,8 +173,12 @@ console.log("\n1. Le téléphone d'un joueur, de l'arrivée au résultat");
   ok(/Réponse envoyée/.test(P.txt()), 'le joueur voit que sa réponse est partie');
 
   await handle('adminReveal', { code });
+  const liveRev = db.rows('game_live').filter(x => x.code === code)[0].state;
+  ok(liveRev.results && liveRev.results.Constance, 'le résultat personnel arrive avec la révélation (aucun aller-retour)');
   push(P.subs, 'game_live', code);
-  await wait(80);
+  await wait(15);   // presque aucun délai : le téléphone a déjà tout ce qu'il lui faut
+  ok(!/Pas de réponse/.test(P.txt()), 'jamais de « Pas de réponse » gris avant le vrai résultat');
+  await wait(65);
   ok(/Bonne réponse/.test(P.txt()), 'la bonne réponse est annoncée au joueur');
   ok(/\+\d+ pt/.test(P.txt()), 'ses points s\'affichent');
 }

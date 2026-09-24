@@ -120,7 +120,8 @@ function mergeMe(v) {
   const row = (v.board || []).filter(b => b.pseudo === S.pseudo)[0];
   if (!row && v.board) { v.notJoined = true; return v; }
   const mine = S.local && S.local.qIndex === v.qIndex;
-  v.me = Object.assign({ pseudo: S.pseudo, score: 0, rank: 1, good: 0, streak: 0 }, row || {}, {
+  const res = v.results ? v.results[S.pseudo] : null;
+  v.me = Object.assign({ pseudo: S.pseudo, score: 0, rank: 1, good: 0, streak: 0 }, row || {}, res ? { result: res } : {}, {
     answered: !!mine, answer: mine ? S.local.a : null,
     jokerUsed: !!S.jokerUsed,
     hide: S.joker && S.joker.qIndex === v.qIndex ? S.joker.hide : null,
@@ -190,7 +191,7 @@ function refresh() {
   const v = localPromote(S.view);
   const answered = v.me && (v.me.answered || (S.local && S.local.qIndex === v.qIndex));
   const hide = jokerHide(v);
-  const key = [v.status, v.qIndex, answered ? 1 : 0, v.status === 'REVEAL' || v.status === 'SCORES' || v.status === 'END' ? v.version : '', v.chapter ? v.chapter.idx : '',
+  const key = [v.status, v.qIndex, answered ? 1 : 0, v.me && v.me.result ? 'r' : 'w', v.status === 'REVEAL' || v.status === 'SCORES' || v.status === 'END' ? v.version : '', v.chapter ? v.chapter.idx : '',
     hide ? 'j' : '', v.me && v.me.out ? 'out' : '', v.me && v.me.spectator ? 'sp' : '', v.status === 'LOBBY' && v.me ? v.me.team : ''].join('|');
   if (key !== S.key) { S.key = key; render(v, answered); }
   updateHeader(v);
@@ -285,7 +286,12 @@ function render(v, answered) {
       break;
 
     case 'REVEAL': {
-      const r = (v.me && v.me.result) || { ok: false, answered: false, pts: 0 };
+      if (!(v.me && v.me.result)) {
+        // le résultat personnel n'est pas encore arrivé : on n'annonce rien et on ne joue aucun son
+        app.innerHTML = h + progress(v) + `<div class="hero fade-in"><div class="big">⏳</div><h2>Correction…</h2></div>`;
+        break;
+      }
+      const r = v.me.result;
       const cls = r.ok ? 'ok' : (r.answered ? 'ko' : 'none');
       const carte = q.type === 'CARTE';
       const title = carte && r.answered ? (r.km !== null && r.km !== undefined ? '📍 À ' + fmtKm(r.km) : 'Point hors carte') : (r.ok ? 'Bonne réponse !' : (r.answered ? 'Raté…' : 'Pas de réponse'));

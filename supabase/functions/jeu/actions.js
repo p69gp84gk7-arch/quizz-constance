@@ -85,6 +85,14 @@ export function createActions(db) {
       pseudo: p.pseudo, score: p.score || 0, rank: p.rank, good: p.good || 0,
       streak: p.streak || 0, lives: p.lives, out: p.out || 0, team: p.team,
     }));
+    // À la révélation, chaque joueur doit connaître SON résultat tout de suite :
+    // sans ça, le téléphone affiche « pas de réponse » pendant la demi-seconde d'attente.
+    if (st.reveal && (st.status === 'REVEAL' || st.status === 'SCORES')) {
+      pub.results = {};
+      Object.keys(st.reveal.results).forEach(pid => {
+        if (players[pid]) pub.results[players[pid].pseudo] = st.reveal.results[pid];
+      });
+    }
     const mj = E.adminView(st, players, answers);
     check(await db.from('games').upsert({
       code: st.code, status: st.status, state: st,

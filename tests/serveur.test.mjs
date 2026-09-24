@@ -102,6 +102,9 @@ console.log('\n1. Partie complète : création, arrivée des joueurs, questions,
     await handle('adminReveal', { code });
     g = db.rows('games')[0].state;
     ok(g.status === 'REVEAL', 'question révélée');
+    const vit = db.rows('game_live')[0].state;
+    ok(vit.results && Object.keys(vit.results).length === 3, 'chaque joueur reçoit son résultat dans la vitrine');
+    ok(vit.results.Constance.ok === true && vit.results.Paul.ok === false, 'les corrections sont justes');
   }
 
   const hist = db.rows('answers');
