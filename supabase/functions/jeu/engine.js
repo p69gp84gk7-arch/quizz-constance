@@ -100,8 +100,13 @@ export function normalizeSettings(s) {
 /* Banque de questions                                                 */
 /* ------------------------------------------------------------------ */
 
-/** Question dont la réponse est une année (« En quelle année… », 1789…). */
+/**
+ * Question dont la réponse est une année (« En quelle année… », 1789…).
+ * La base calcule ce drapeau elle-même (colonne est_annee) : quand il est là,
+ * inutile de transporter le texte de la question et sa réponse.
+ */
 export function isDateQ(q) {
+  if (q.est_annee !== undefined && q.est_annee !== null) return !!q.est_annee;
   return /(en|quelle) ann[ée]e/i.test(String(q.question)) && /^\s*\d{3,4}\s*$/.test(String(q.reponse));
 }
 

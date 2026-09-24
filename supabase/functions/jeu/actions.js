@@ -27,7 +27,7 @@ export function createActions(db) {
 
   // Pour composer une partie, seules ces colonnes servent : inutile de transporter
   // les explications, indices et anecdotes des 1 521 questions.
-  const COLS_LEGERES = 'id,theme,categorie,difficulte,type,question,reponse,media_url,epoque,actif,utilisations';
+  const COLS_LEGERES = 'id,theme,categorie,difficulte,type,media_url,epoque,actif,utilisations,est_annee';
 
   /** Toutes les questions (au-delà de la limite de 1 000 lignes par requête). */
   async function allQuestions(cols) {
@@ -210,8 +210,11 @@ export function createActions(db) {
     p = p || {};
     switch (action) {
 
-      case 'time':
+      /** Heure du serveur — et petit réveil de la base au passage. */
+      case 'time': {
+        await db.from('app_state').select('*').eq('id', 1).maybeSingle();
         return { now: Date.now() };
+      }
 
       /* ---------------- Préparation ---------------- */
 

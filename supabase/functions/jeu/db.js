@@ -15,7 +15,11 @@
  *   db.from('table').insert(rows) / .update(champs).eq(…) / .upsert(rows, {onConflict}) / .delete().eq(…)
  */
 
-export function createDb(url, serviceKey) {
+export function createDb(url, serviceKey, opts) {
+  // Première tentative généreuse (la base peut être en train de se réveiller),
+  // deuxième plus courte pour ne pas faire patienter indéfiniment.
+  const T1 = (opts && opts.timeoutMs) || 30000;
+  const T2 = (opts && opts.retryMs) || 20000;
   const base = String(url).replace(/\/+$/, '') + '/rest/v1/';
   const headers = {
     apikey: serviceKey,
@@ -23,13 +27,17 @@ export function createDb(url, serviceKey) {
     'Content-Type': 'application/json',
   };
 
-  /** Une requête HTTP vers PostgREST, avec un garde-fou de 20 s. */
-  async function send(path, opts) {
+  /**
+   * Une requête HTTP vers PostgREST. Sur le forfait gratuit, la base s'endort :
+   * la première requête après une longue inactivité peut demander une trentaine
+   * de secondes. On patiente donc, et on réessaie une fois avant d'abandonner.
+   */
+  async function send(path, reqOpts, deuxieme) {
     const ctrl = new AbortController();
-    const stop = setTimeout(() => ctrl.abort(), 20000);
+    const stop = setTimeout(() => ctrl.abort(), deuxieme ? T2 : T1);
     try {
-      const res = await fetch(base + path, Object.assign({ signal: ctrl.signal }, opts, {
-        headers: Object.assign({}, headers, opts.headers || {}),
+      const res = await fetch(base + path, Object.assign({ signal: ctrl.signal }, reqOpts, {
+        headers: Object.assign({}, headers, reqOpts.headers || {}),
       }));
       const txt = await res.text();
       let body = null;
@@ -40,8 +48,13 @@ export function createDb(url, serviceKey) {
       }
       return { data: body, error: null };
     } catch (e) {
+      clearTimeout(stop);
+      // première tentative ratée : la base était probablement en train de se réveiller
+      if (!deuxieme) return send(path, reqOpts, true);
       const aborted = e && e.name === 'AbortError';
-      return { data: null, error: { message: aborted ? 'La base n\'a pas répondu à temps.' : String(e && e.message || e) } };
+      return { data: null, error: { message: aborted
+        ? 'La base met trop de temps à répondre (elle se réveille). Réessaie dans quelques secondes.'
+        : String(e && e.message || e) } };
     } finally {
       clearTimeout(stop);
     }

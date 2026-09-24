@@ -106,12 +106,13 @@ console.log('\n5. Garde-fou réseau');
   // un serveur qui ne répond jamais ne doit pas bloquer la partie éternellement
   const mort = http.createServer(() => { /* silence */ });
   await new Promise(r => mort.listen(0, r));
-  const lent = createDb('http://127.0.0.1:' + mort.address().port, 'k');
+  // délais réduits pour le test : en production, 30 s puis 20 s
+  const lent = createDb('http://127.0.0.1:' + mort.address().port, 'k', { timeoutMs: 400, retryMs: 300 });
   const t0 = Date.now();
   const p = lent.from('games').select('*');
-  const r = await Promise.race([p, new Promise(res => setTimeout(() => res('toujours en attente'), 22000))]);
-  const secs = Math.round((Date.now() - t0) / 1000);
-  ok(r !== 'toujours en attente' && r.error, 'une base muette rend la main avec une erreur (après ' + secs + ' s)');
+  const r = await Promise.race([p, new Promise(res => setTimeout(() => res('toujours en attente'), 5000))]);
+  const ms = Date.now() - t0;
+  ok(r !== 'toujours en attente' && r.error && ms >= 700, 'une base muette rend la main avec une erreur, après une seconde tentative (' + ms + ' ms)');
   mort.close();
 }
 

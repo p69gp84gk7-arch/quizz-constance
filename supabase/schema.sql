@@ -34,7 +34,14 @@ create table if not exists questions (
   anecdote      text default '',
   created_at    timestamptz default now()
 );
+-- Calculée par la base : évite de transporter le texte des questions pour composer un quiz
+alter table questions add column if not exists est_annee boolean
+  generated always as (
+    question ~* '(en|quelle) ann[ée]e' and reponse ~ '^[[:space:]]*[0-9]{3,4}[[:space:]]*$'
+  ) stored;
+
 create index if not exists questions_theme_idx  on questions (theme, categorie);
+create index if not exists questions_annee_idx  on questions (est_annee);
 create index if not exists questions_filtre_idx on questions (actif, type, difficulte);
 
 -- ------------------------------------------------------------------
