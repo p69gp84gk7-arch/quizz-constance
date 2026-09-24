@@ -84,7 +84,7 @@ export function makeDb() {
 
   function builder(table, op, payload, opts) {
     const filters = [];
-    const state = { order: null, limit: null, range: null, single: false };
+    const state = { order: null, limit: null, range: null, single: false, cols: null };
 
     const match = r => filters.every(([c, v]) => String(r[c]) === String(v));
 
@@ -98,6 +98,8 @@ export function makeDb() {
         }
         if (state.range) data = data.slice(state.range[0], state.range[1] + 1);
         if (state.limit !== null) data = data.slice(0, state.limit);
+        // comme PostgREST : on ne rend que les colonnes demandées
+        if (state.cols) data = data.map(r => Object.fromEntries(state.cols.map(c => [c, r[c]])));
         if (state.single) return { data: data[0] || null, error: null };
         return { data: data, error: null };
       }
@@ -146,7 +148,10 @@ export function makeDb() {
       range(a, b) { state.range = [a, b]; return api; },
       maybeSingle() { state.single = true; return api; },
       single() { state.single = true; return api; },
-      select() { return api; },
+      select(cols) {
+        if (op === 'select' && cols && cols !== '*') state.cols = cols.split(',').map(c => c.trim());
+        return api;
+      },
       then(res, rej) { try { return Promise.resolve(run()).then(res, rej); } catch (e) { return Promise.reject(e).catch(rej); } },
     };
     return api;
@@ -155,7 +160,7 @@ export function makeDb() {
   return {
     from(table) {
       return {
-        select: () => builder(table, 'select'),
+        select: cols => builder(table, 'select').select(cols || '*'),
         insert: p => builder(table, 'insert', p),
         update: p => builder(table, 'update', p),
         upsert: (p, o) => builder(table, 'upsert', p, o),

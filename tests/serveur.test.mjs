@@ -31,6 +31,8 @@ function parseCsv(text) {
   });
 }
 const QUESTIONS = parseCsv(fs.readFileSync(path.join(ROOT, 'supabase/questions.csv'), 'utf8'));
+// colonne calculée par la base (voir supabase/maj-rapidite.sql)
+QUESTIONS.forEach(q => { q.est_annee = /(en|quelle) ann[ée]e/i.test(q.question) && /^\s*\d{3,4}\s*$/.test(q.reponse); });
 
 let fails = 0;
 const ok = (cond, msg) => { console.log((cond ? '  ✅ ' : '  ❌ ') + msg); if (!cond) fails++; };

@@ -27,7 +27,7 @@ export function createActions(db) {
 
   // Pour composer une partie, seules ces colonnes servent : inutile de transporter
   // les explications, indices et anecdotes des 1 521 questions.
-  const COLS_LEGERES = 'id,theme,categorie,difficulte,type,media_url,epoque,actif,utilisations,est_annee';
+  const COLS_LEGERES = 'id,theme,categorie,difficulte,type,question,media_url,epoque,actif,utilisations,est_annee';
 
   /** Toutes les questions (au-delà de la limite de 1 000 lignes par requête). */
   async function allQuestions(cols) {
