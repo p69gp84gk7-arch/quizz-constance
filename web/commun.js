@@ -1,5 +1,9 @@
 /* ================== Utilitaires communs (admin, écran, joueur) ================== */
 
+/** Version de l'appli, affichée en bas de l'écran d'accueil : permet de vérifier
+ *  qu'un téléphone tourne bien la dernière version et pas une copie en cache. */
+const APP_VERSION = '2026-09-24-a';
+
 const VISUALS = {
   plateau: 'Plateau TV', elegant: 'Élégant', pop: 'Pop', neon: 'Néon', nature: 'Nature', enfants: 'Enfants',
 };

@@ -103,7 +103,8 @@ function endIntro(code) {
 /** Charge une page du site dans jsdom, scripts locaux compris. */
 async function loadPage(file, url) {
   const html = fs.readFileSync(path.join(ROOT, 'web', file), 'utf8');
-  const srcs = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1]).filter(s => !/^https?:/.test(s));
+  const srcs = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1].split('?')[0])
+    .filter(s => !/^https?:/.test(s));
   const inline = html.split('<script>').slice(1).map(p => p.split('</script>')[0]).join('\n');
   const dom = new JSDOM(html.replace(/<script[\s\S]*?<\/script>/g, ''), { url, pretendToBeVisual: true, runScripts: 'dangerously' });
   const win = dom.window;

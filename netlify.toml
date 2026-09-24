@@ -3,6 +3,23 @@
   publish = "web"
   command = ""
 
+# Les fichiers du jeu ne doivent JAMAIS être gardés en cache par les téléphones :
+# sinon un joueur peut continuer à jouer avec une ancienne version après une correction.
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
 [[headers]]
   for = "/*"
   [headers.values]
