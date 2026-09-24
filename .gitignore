@@ -1,0 +1,14 @@
+# Clés et secrets — ne JAMAIS envoyer sur GitHub
+.env
+.env.*
+*.key
+service_role*
+supabase/.temp/
+
+# macOS / iCloud
+.DS_Store
+.iCloud
+*.icloud
+
+# Node
+node_modules/

@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<?!= include('Styles'); ?>
+<style>
+  body { min-height: 100vh; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 14px 14px 40px; min-height: 100vh; display: flex; flex-direction: column; gap: 14px; }
+  .top { display: flex; align-items: center; gap: 8px; }
+  .top .me { font-weight: 800; font-family: var(--font-title); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hero { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 14px; }
+  .hero .big { font-size: 64px; line-height: 1; }
+  .qtext { font-family: var(--font-title); font-size: 20px; font-weight: 700; }
+  .choices.phone { grid-template-columns: 1fr; }
+  .choices.phone.two { grid-template-columns: 1fr 1fr; }
+  .choices.phone .choice { min-height: 64px; font-size: 18px; }
+  .choices.phone.two .choice { min-height: 120px; justify-content: center; font-size: 22px; }
+  .order-item { display: flex; align-items: center; gap: 10px; padding: 14px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--card-border); font-weight: 700; cursor: pointer; }
+  .order-item .n { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.12); flex: none; }
+  .order-item.sel { opacity: .55; }
+  .order-item.sel .n { background: var(--accent); color: var(--accent-text); }
+  .result { border-radius: var(--radius); padding: 26px 18px; text-align: center; color: #fff; }
+  .result.ok { background: var(--ok); } .result.ko { background: var(--ko); } .result.none { background: #6c757d; }
+  .est-input { font-size: 32px; text-align: center; font-weight: 800; }
+  .intro-count { width: 120px; height: 120px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-text);
+    font-family: var(--font-title); font-weight: 800; font-size: 60px; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { transform: scale(1) } 50% { transform: scale(1.08) } }
+  .code-input { font-size: 34px; text-align: center; letter-spacing: 10px; text-transform: uppercase; font-weight: 800; }
+  .qmap { height: 52vh; }
+  .banner { border-radius: var(--radius); padding: 10px 14px; text-align: center; font-weight: 800; background: var(--card); border: 2px solid var(--accent); }
+  .choice.hidden-j { visibility: hidden; }
+  .media-img { max-height: 30vh; }
+</style>
+</head>
+<body data-visual="plateau">
+<div class="wrap" id="app"></div>
+
+<?!= include('Commun'); ?>
+<script>
+const INIT_CODE = <?= code ?>;
+const S = {
+  code: INIT_CODE || store('qc_code') || '',
+  pid: store('qc_pid') || (function () { const id = newId(); store('qc_pid', id); return id; })(),
+  pseudo: store('qc_pseudo') || '',
+  view: null, key: '', joined: false, local: null, soundFor: null, endSound: false, polling: false, lastTick: null,
+};
+const app = $('#app');
+
+/* ---------------- Écrans d'entrée ---------------- */
+
+function screenCode(msg) {
+  S.joined = false; stopPolling();
+  app.innerHTML = `
+    <div class="hero fade-in">
+      <div class="big">🎯</div>
+      <h1>Le Quizz de Constance</h1>
+      ${msg ? `<div class="card">${esc(msg)}</div>` : ''}
+      <div class="card col" style="width:100%">
+        <label class="lbl">Code de la partie</label>
+        <input id="code" class="code-input" maxlength="4" autocomplete="off" value="${esc(S.code)}">
+        <button class="btn primary big" id="go">Continuer</button>
+      </div>
+    </div>`;
+  $('#go').onclick = () => {
+    const c = $('#code').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (c.length !== 4) return toast('Le code fait 4 caractères.', true);
+    S.code = c; store('qc_code', c); screenJoin();
+  };
+}
+
+function screenJoin(msg) {
+  S.joined = false; stopPolling();
+  app.innerHTML = `
+    <div class="hero fade-in">
+      <div class="big">👋</div>
+      <h1>Partie ${esc(S.code)}</h1>
+      ${msg ? `<div class="card">${esc(msg)}</div>` : ''}
+      <div class="card col" style="width:100%">
+        <label class="lbl">Ton pseudo</label>
+        <input id="pseudo" type="text" maxlength="20" autocomplete="nickname" value="${esc(S.pseudo)}" style="font-size:22px;text-align:center">
+        <div class="muted" style="font-size:13px">Garde le même pseudo à chaque partie pour cumuler tes points au classement général.</div>
+        <button class="btn primary big" id="join">Rejoindre la partie</button>
+        <button class="btn small" id="chg">Changer de partie</button>
+      </div>
+    </div>`;
+  $('#pseudo').focus();
+  $('#pseudo').onkeydown = e => { if (e.key === 'Enter') $('#join').click(); };
+  $('#chg').onclick = () => { S.code = ''; store('qc_code', null); screenCode(); };
+  $('#join').onclick = () => {
+    Sound.unlock();
+    const p = $('#pseudo').value.trim();
+    if (p.length < 2) return toast('Pseudo trop court.', true);
+    $('#join').disabled = true;
+    rpc('playerJoin', S.code, S.pid, p).then(v => {
+      S.pseudo = p; store('qc_pseudo', p); S.joined = true; S.key = '';
+      onView(v, Date.now());
+      startPolling();
+    }).catch(e => { $('#join').disabled = false; toast(e, true); });
+  };
+}
+
+/* ---------------- Boucle de synchronisation ---------------- */
+
+const POLL = createPoller(
+  () => rpc('playerPoll', S.code, S.pid, document.visibilityState),
+  (v, sent) => { if (S.joined) onView(v, sent); },
+  () => S.view && ['QUESTION', 'INTRO'].indexOf(S.view.status) >= 0 ? 1000 : 1600
+);
+
+function startPolling() {
+  if (S.polling) return;
+  S.polling = true;
+  POLL.start();
+}
+
+function stopPolling() {
+  S.polling = false;
+  POLL.stop();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!S.joined) return;
+  rpc('playerPresence', S.code, S.pid, document.visibilityState).catch(() => {});
+  // Retour dans l'appli (écran déverrouillé, changement d'appli) : on se resynchronise tout de suite
+  if (document.visibilityState === 'visible') POLL.now();
+});
+window.addEventListener('online', () => { if (S.joined) POLL.now(); });
+window.addEventListener('pageshow', () => { if (S.joined) POLL.now(); });
+
+function onView(v, sentAt) {
+  if (v.status === 'SWITCH') return switchGame(v.code);
+  if (v.status === 'NOGAME') { S.joined = false; stopPolling(); return screenCode('Cette partie n\'existe pas ou est terminée.'); }
+  if (v.notJoined) { S.joined = false; stopPolling(); return screenJoin('Tu as été retiré·e de la partie. Tu peux la rejoindre à nouveau.'); }
+  if (v.now) Clock.sync(v.now, sentAt);
+  S.view = v;
+  applyVisual(v.visual);
+  Sound.enabled = v.sounds;
+  refresh();
+}
+
+/** Le maître du jeu a lancé une nouvelle partie : on la rejoint automatiquement avec le même pseudo. */
+function switchGame(code) {
+  if (S.switching) return;
+  S.switching = true;
+  rpc('playerJoin', code, S.pid, S.pseudo).then(v => {
+    S.code = code; store('qc_code', code); S.key = ''; S.local = null; S.soundFor = null; S.endSound = false; POLL.reset();
+    toast('🎉 Nouvelle partie ! Tu es inscrit·e.');
+    onView(v, Date.now());
+  }).catch(e => { S.joined = false; stopPolling(); S.code = code; store('qc_code', code); screenJoin(e.message || String(e)); })
+    .finally(() => { S.switching = false; });
+}
+
+function refresh() {
+  const v = localPromote(S.view);
+  const answered = v.me && (v.me.answered || (S.local && S.local.qIndex === v.qIndex));
+  const hide = jokerHide(v);
+  const key = [v.status, v.qIndex, answered ? 1 : 0, v.status === 'REVEAL' || v.status === 'SCORES' || v.status === 'END' ? v.version : '', v.chapter ? v.chapter.idx : '',
+    hide ? 'j' : '', v.me && v.me.out ? 'out' : '', v.me && v.me.spectator ? 'sp' : '', v.status === 'LOBBY' && v.me ? v.me.team : ''].join('|');
+  if (key !== S.key) { S.key = key; render(v, answered); }
+  updateHeader(v);
+}
+
+/* ---------------- Rendu ---------------- */
+
+function myTeam(v) {
+  if (!v.teams || !v.me) return null;
+  return v.teams.filter(t => t.team === v.me.team)[0] || null;
+}
+
+/** Propositions retirées par le joker 50/50 pour la question en cours. */
+function jokerHide(v) {
+  if (v.me && v.me.hide) return v.me.hide;
+  return S.joker && S.joker.qIndex === v.qIndex ? S.joker.hide : null;
+}
+
+function header(v) {
+  const t = myTeam(v);
+  return `<div class="top">
+      <span class="me grow">👤 ${esc(v.me ? v.me.pseudo : S.pseudo)}${t ? ' · ' + esc(t.name) : ''}</span>
+      ${v.format === 'survie' && v.me ? `<span class="pill">${v.me.out ? '💀' : hearts(v.me.lives, v.lives)}</span>` : ''}
+      <span class="pill" id="h-score">${v.me ? v.me.score : 0} pt${v.me && v.me.score > 1 ? 's' : ''}</span>
+      <span class="pill accent" id="h-rank">${v.me ? v.me.rank : '-'}<sup>e</sup></span>
+    </div>`;
+}
+
+function updateHeader(v) {
+  if (!v.me) return;
+  const s = $('#h-score'), r = $('#h-rank');
+  if (s) s.textContent = v.me.score + ' pt' + (v.me.score > 1 ? 's' : '');
+  if (r) r.innerHTML = v.me.rank + '<sup>' + (v.me.rank === 1 ? 'er' : 'e') + '</sup>';
+}
+
+function progress(v) {
+  return v.qIndex >= 0 ? `<div class="row muted" style="font-size:14px">
+      <span>Question ${v.qIndex + 1}/${v.total}</span><span class="spacer"></span>
+      ${v.chapter && v.chapter.count > 1 ? `<span>${esc(v.chapter.name)}</span>` : ''}</div>` : '';
+}
+
+function render(v, answered) {
+  const h = header(v);
+  const q = v.question;
+  switch (v.status) {
+    case 'LOBBY':
+      app.innerHTML = h + `<div class="hero fade-in"><div class="big">⏳</div><h2>Tu es dans la partie !</h2>
+        ${myTeam(v) ? `<div class="banner">Ton équipe : ${esc(myTeam(v).name)}</div>` : ''}
+        ${v.format !== 'classique' ? `<p><b>${FORMAT_LABELS[v.format]}</b><br><span class="muted">${formatRule(v)}</span></p>` : ''}
+        <p class="muted">Le maître du jeu va bientôt lancer le quiz.<br>${v.playerCount} joueur${v.playerCount > 1 ? 's' : ''} connecté${v.playerCount > 1 ? 's' : ''}.</p></div>`;
+      break;
+
+    case 'CHAPTER':
+      app.innerHTML = h + `<div class="hero pop-in"><div class="muted">Chapitre ${v.chapter.idx}/${v.chapter.count}</div>
+        <h1>${esc(v.chapter.name)}</h1><p class="muted">${v.chapter.nb} questions · Regarde l'écran !</p></div>`;
+      break;
+
+    case 'INTRO':
+      app.innerHTML = h + `<div class="hero pop-in">
+        <div class="muted">Question ${v.qIndex + 1}/${v.total}</div>
+        <div class="big" style="font-size:90px">${themeIcon(q)}</div>
+        <h1 style="margin:0">${esc(introTitle(q))}</h1>
+        <div class="muted">${q.epoque ? esc(q.epoque) + ' · ' : ''}${typeLabel(q.type)} · ${levelStars(q.diff)}</div>
+        ${multBadge(q)}
+        ${duelBanner(v)}
+        <div class="intro-count" id="icount">${introLeft(v)}</div>
+        <p class="muted">${v.me && v.me.out ? 'Tu es éliminé·e : regarde la suite !' : 'Prépare-toi !'}</p></div>`;
+      break;
+
+    case 'READ':
+      app.innerHTML = h + progress(v) + `<div class="card fade-in"><div class="qtext">${esc(q.text)}</div></div>
+        <div class="hero"><div class="big">👂</div><h2>Écoute la question…</h2><p class="muted">Tu pourras répondre dès que le chrono démarre.</p></div>`;
+      break;
+
+    case 'QUESTION':
+      if (v.me && v.me.out) {
+        app.innerHTML = h + progress(v) + timerHtml() + `<div class="card"><div class="qtext">${esc(q.text)}</div></div>
+          <div class="hero pop-in"><div class="big">💀</div><h2>Éliminé·e</h2><p class="muted">Regarde l'écran et encourage les survivants !</p></div>`;
+      } else if (answered) {
+        app.innerHTML = h + progress(v) + timerHtml() + `<div class="hero pop-in"><div class="big">📨</div><h2>Réponse envoyée !</h2>
+          <p class="muted">${esc(localAnswerText(v))}</p><p class="muted">Attends la révélation…</p></div>`;
+      } else {
+        const canJoker = v.joker && v.me && !v.me.jokerUsed && !jokerHide(v) && q.type === 'QCM' && q.choices && q.choices.length === 4 && !v.me.spectator;
+        app.innerHTML = h + progress(v) + timerHtml() + (v.me && v.me.spectator ? duelBanner(v) : '') + (q.mult > 1 ? `<div class="center">${multBadge(q)}</div>` : '') +
+          `<div class="card fade-in"><div class="row" style="gap:6px"><span class="muted grow" style="font-size:13px">${typeLabel(q.type)}${q.hint ? ' · ' + esc(q.hint) : ''}</span>
+             ${canJoker ? '<button class="btn small" id="joker">🃏 50/50</button>' : ''}</div>
+           ${q.media && q.media.kind === 'image' ? mediaHtml(q, true, { start: q.start, duration: v.duration }) : ''}
+           <div class="qtext">${esc(q.text)}</div></div>` + answerUi(q, jokerHide(v));
+        bindAnswerUi(q, v);
+        if (canJoker) $('#joker').onclick = () => useJoker(v);
+      }
+      break;
+
+    case 'REVEAL': {
+      const r = (v.me && v.me.result) || { ok: false, answered: false, pts: 0 };
+      const cls = r.ok ? 'ok' : (r.answered ? 'ko' : 'none');
+      const carte = q.type === 'CARTE';
+      const title = carte && r.answered ? (r.km !== null && r.km !== undefined ? '📍 À ' + fmtKm(r.km) : 'Point hors carte') : (r.ok ? 'Bonne réponse !' : (r.answered ? 'Raté…' : 'Pas de réponse'));
+      const notes = [];
+      if (r.spect) notes.push('👀 Tu étais spectateur : pas de points sur cette question.');
+      if (v.format === 'buzzer' && r.ok && !r.pts) notes.push('⚡ Juste, mais ' + esc(v.reveal.winner || 'quelqu\'un') + ' a été plus rapide !');
+      if (v.format === 'face' && !r.spect && v.duel) notes.push(v.reveal.winner === (v.me && v.me.pseudo) ? '⚔️ Tu remportes le duel !' : v.reveal.winner ? '⚔️ ' + esc(v.reveal.winner) + ' remporte le duel.' : '⚔️ Duel nul.');
+      if (r.lostLife) notes.push(v.me && v.me.out ? '💀 Tu es éliminé·e !' : '💔 Tu perds une vie.');
+      if (v.format === 'survie' && v.reveal.repechage && !r.spect) notes.push('😅 Tout le monde s\'est trompé : personne ne perd de vie !');
+      app.innerHTML = h + progress(v) + `
+        <div class="result ${cls} pop-in">
+          <div style="font-size:56px">${r.ok ? '✅' : (r.answered ? (carte && r.pts ? '👍' : '❌') : '⌛')}</div>
+          <h1>${title}</h1>
+          ${r.pts ? `<div style="font-size:24px;font-weight:800">+${r.pts} pt${r.pts > 1 ? 's' : ''}${v.reveal.mult > 1 ? ' (×' + v.reveal.mult + ')' : ''}</div>` : ''}
+          ${v.me && v.me.streak >= 3 ? `<div>🔥 Série de ${v.me.streak}</div>` : ''}
+        </div>
+        ${notes.map(n => `<div class="banner">${n}</div>`).join('')}
+        ${carte ? '<div id="pmap" class="qmap" style="height:36vh"></div>' : ''}
+        <div class="card"><div class="muted" style="font-size:13px">La réponse</div>
+          <div class="qtext">${esc(v.reveal.answerText)}</div>
+          ${r.answered && !r.ok && r.a && !carte ? `<div class="muted">Ta réponse : ${esc(r.a)}</div>` : ''}
+          ${v.reveal.expl ? `<p style="margin-bottom:0">💡 ${esc(v.reveal.expl)}</p>` : ''}
+        </div>`;
+      if (carte) makeMap($('#pmap'), q.zone, { interactive: true }).then(map => drawMapReveal(map, v.reveal.target, v.reveal.pins, v.reveal.answerText)).catch(() => {});
+      if (S.soundFor !== v.qIndex && !r.spect) {
+        S.soundFor = v.qIndex;
+        r.ok ? Sound.good() : Sound.bad();
+        if (navigator.vibrate) navigator.vibrate(r.ok ? 80 : [60, 60, 60]);
+      }
+      break;
+    }
+
+    case 'SCORES':
+      app.innerHTML = h + `<div class="hero pop-in">${v.teams ? teamsMini(v) : ''}<div class="muted">Ton classement</div>
+        <div class="big" style="font-size:90px;font-family:var(--font-title)">${v.me.rank}<sup style="font-size:40px">${v.me.rank === 1 ? 'er' : 'e'}</sup></div>
+        <h2>${v.me.score} point${v.me.score > 1 ? 's' : ''}</h2><p class="muted">sur ${v.playerCount} joueurs</p></div>`;
+      break;
+
+    case 'END': {
+      const medal = ['🥇', '🥈', '🥉'][v.me.rank - 1] || '🎉';
+      app.innerHTML = h + `<div class="hero pop-in"><div class="big" style="font-size:100px">${medal}</div>
+        <h1>${v.me.rank}${v.me.rank === 1 ? 'er' : 'e'} sur ${v.playerCount}</h1>
+        <h2>${v.me.score} point${v.me.score > 1 ? 's' : ''} · ${v.me.good} bonne${v.me.good > 1 ? 's' : ''} réponse${v.me.good > 1 ? 's' : ''}</h2>
+        ${v.teams ? teamsMini(v) : ''}
+        <div class="card" style="width:100%;text-align:left">${(v.ranking || []).slice(0, 5).map(p =>
+          `<div class="row"><b>${p.rank}.</b><span class="grow">${esc(p.pseudo)}</span><b>${p.score}</b></div>`).join('')}</div>
+        <p class="muted">Merci d'avoir joué ! 🎯</p></div>`;
+      if (!S.endSound) { S.endSound = true; v.me.rank === 1 ? Sound.fanfare() : Sound.reveal(); }
+      break;
+    }
+  }
+}
+
+function formatRule(v) {
+  return {
+    face: 'À chaque question, deux joueurs s\'affrontent : le plus rapide à trouver gagne. Les autres jouent pour le fun.',
+    survie: v.lives + ' vie' + (v.lives > 1 ? 's' : '') + ' : chaque erreur en coûte une. Le dernier survivant gagne !',
+    equipes: 'Les points de ton équipe = la moyenne des points de ses joueurs.',
+    buzzer: 'Seule la première bonne réponse rapporte des points : sois rapide !',
+  }[v.format] || '';
+}
+
+function duelBanner(v) {
+  if (!v.duel || v.duel.length < 2) return '';
+  const me = v.me && v.me.pseudo;
+  if (v.duel.indexOf(me) >= 0) return `<div class="banner pop-in">⚔️ C'est ton duel contre ${esc(v.duel[0] === me ? v.duel[1] : v.duel[0])} !</div>`;
+  return `<div class="banner">⚔️ ${esc(v.duel[0])} contre ${esc(v.duel[1])}<br><span class="muted" style="font-weight:600">Tu peux répondre pour le fun (0 point)</span></div>`;
+}
+
+function teamsMini(v) {
+  return `<div class="card" style="width:100%;text-align:left">${v.teams.map(t =>
+    `<div class="row"><b>${t.rank}.</b><span class="grow">${esc(t.name)}</span><b>${t.score}</b></div>`).join('')}</div>`;
+}
+
+function useJoker(v) {
+  $('#joker').disabled = true;
+  rpc('playerJoker', S.code, S.pid, v.qIndex).then(r => {
+    if (!r.ok) return toast(r.msg, true);
+    S.joker = { qIndex: v.qIndex, hide: r.hide };
+    S.key = ''; refresh();
+  }).catch(e => toast(e, true));
+}
+
+/* ---------------- Réponses ---------------- */
+
+function answerUi(q, hide) {
+  if (q.type === 'QCM' || q.type === 'VF') {
+    return `<div class="choices phone ${q.choices.length === 2 ? 'two' : ''}">${q.choices.map((c, i) =>
+      `<button class="choice k${i} ${hide && hide.indexOf(i) >= 0 ? 'hidden-j' : ''}" data-i="${i}"><span class="shape">${SHAPES[i]}</span><span>${esc(c)}</span></button>`).join('')}</div>`;
+  }
+  if (q.type === 'CARTE') {
+    return `<div id="pmap" class="qmap"></div>
+      <div class="row"><span class="muted grow" id="mapmsg" style="font-size:14px">Touche la carte pour placer ton point (zoom avec deux doigts)</span>
+      <button class="btn primary big" id="send" disabled>Valider</button></div>`;
+  }
+  if (q.type === 'ESTIMATION') {
+    return `<div class="card col"><input id="est" class="est-input" type="text" inputmode="decimal" placeholder="?" autocomplete="off">
+      ${q.unit ? `<div class="center muted">${esc(q.unit)}</div>` : ''}
+      <button class="btn primary big" id="send">Valider</button></div>`;
+  }
+  if (q.type === 'ORDRE') {
+    return `<div class="muted center" style="font-size:14px">Touche les éléments dans l'ordre : ${esc(q.hint || '')}</div>
+      <div class="col" id="order">${q.items.map((it, i) =>
+        `<div class="order-item" data-i="${i}"><span class="n"></span><span>${esc(it)}</span></div>`).join('')}</div>
+      <div class="row"><button class="btn grow" id="reset">Recommencer</button><button class="btn primary grow" id="send" disabled>Valider</button></div>`;
+  }
+  return '';
+}
+
+function bindAnswerUi(q, v) {
+  if (q.type === 'QCM' || q.type === 'VF') {
+    app.querySelectorAll('.choice').forEach(b => b.onclick = () => send(v, Number(b.dataset.i)));
+  } else if (q.type === 'ESTIMATION') {
+    const go = () => {
+      const n = Number(String($('#est').value).replace(/\s/g, '').replace(',', '.'));
+      if ($('#est').value === '' || isNaN(n)) return toast('Entre un nombre.', true);
+      send(v, n);
+    };
+    $('#send').onclick = go;
+    $('#est').onkeydown = e => { if (e.key === 'Enter') go(); };
+  } else if (q.type === 'CARTE') {
+    let pick = null, marker = null;
+    makeMap($('#pmap'), q.zone, { interactive: true }).then(map => {
+      map.on('click', e => {
+        const ll = e.latlng.wrap();
+        pick = [Math.round(ll.lat * 10000) / 10000, Math.round(ll.lng * 10000) / 10000];
+        if (!marker) {
+          marker = L.marker(e.latlng, { icon: pinIcon(''), draggable: true }).addTo(map);
+          marker.on('dragend', () => { const m = marker.getLatLng().wrap(); pick = [Math.round(m.lat * 10000) / 10000, Math.round(m.lng * 10000) / 10000]; });
+        } else marker.setLatLng(e.latlng);
+        $('#send').disabled = false;
+        $('#mapmsg').textContent = 'Tu peux déplacer ton point, puis valider.';
+      });
+    }).catch(e => toast(e, true));
+    $('#send').onclick = () => { if (pick) send(v, pick); };
+  } else if (q.type === 'ORDRE') {
+    let seq = [];
+    const refresh = () => {
+      app.querySelectorAll('.order-item').forEach(el => {
+        const pos = seq.indexOf(Number(el.dataset.i));
+        el.classList.toggle('sel', pos >= 0);
+        el.querySelector('.n').textContent = pos >= 0 ? pos + 1 : '';
+      });
+      $('#send').disabled = seq.length !== q.items.length;
+    };
+    app.querySelectorAll('.order-item').forEach(el => el.onclick = () => {
+      const i = Number(el.dataset.i);
+      if (seq.indexOf(i) < 0) seq.push(i);
+      refresh();
+    });
+    $('#reset').onclick = () => { seq = []; refresh(); };
+    $('#send').onclick = () => send(v, seq.slice());
+  }
+}
+
+function send(v, a) {
+  Sound.unlock();
+  S.local = { qIndex: v.qIndex, a: a };
+  if (navigator.vibrate) navigator.vibrate(30);
+  S.key = ''; refresh();
+  rpc('playerAnswer', S.code, S.pid, v.qIndex, a).then(r => {
+    if (!r.ok) { toast(r.msg, true); if (r.msg !== 'Réponse déjà enregistrée.') { S.local = null; S.key = ''; } }
+  }).catch(e => { S.local = null; S.key = ''; toast(e, true); });
+}
+
+function localAnswerText(v) {
+  const q = v.question;
+  const a = S.local && S.local.qIndex === v.qIndex ? S.local.a : (v.me ? v.me.answer : null);
+  if (a === null || a === undefined) return '';
+  if (q.choices) return 'Tu as répondu : ' + (q.choices[a] || '');
+  if (q.type === 'ORDRE') return 'Ton ordre : ' + a.map(i => q.items[i]).join(' → ');
+  if (q.type === 'CARTE') return '📍 Ton point est posé.';
+  return 'Tu as répondu : ' + a + (q.unit ? ' ' + q.unit : '');
+}
+
+/* ---------------- Chrono ---------------- */
+
+function timerHtml() {
+  return `<div class="row"><div class="timer grow" id="tbar"><div></div></div><span class="timer-num" id="tnum"></span></div>`;
+}
+
+setInterval(() => {
+  const v = S.view;
+  if (v && v.status === 'INTRO') {
+    const c = $('#icount');
+    const left = introLeft(v);
+    if (c) c.textContent = left;
+    if (left <= 0) refresh(); // la question apparaît pile à la fin du compte à rebours
+    return;
+  }
+  const bar = $('#tbar');
+  if (!v || v.status !== 'QUESTION' || !bar || !v.question) return;
+  const rem = Clock.remaining(v.question.start, v.duration);
+  bar.firstElementChild.style.width = (100 * rem / v.duration) + '%';
+  bar.classList.toggle('warn', rem <= 5);
+  $('#tnum').textContent = Math.ceil(rem);
+  if (rem <= 0 && !(S.local && S.local.qIndex === v.qIndex)) {
+    const ui = app.querySelectorAll('.choice, #send, .order-item, #est, #pmap, #joker');
+    ui.forEach(el => { el.disabled = true; el.style.pointerEvents = 'none'; el.style.opacity = .5; });
+  }
+}, 250);
+
+/* ---------------- Démarrage ---------------- */
+if (S.code) screenJoin(); else screenCode();
+if (S.code && S.pseudo) {
+  // Reprise automatique après un rechargement de page
+  rpc('playerPoll', S.code, S.pid, 'visible').then(v => {
+    if (v.status !== 'NOGAME' && !v.notJoined) { S.joined = true; onView(v, Date.now()); startPolling(); }
+  }).catch(() => {});
+}
+</script>
+</body>
+</html>
