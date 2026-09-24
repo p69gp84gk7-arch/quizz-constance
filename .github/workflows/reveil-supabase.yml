@@ -1,0 +1,29 @@
+# Garde le projet Supabase éveillé : sur le plan gratuit, un projet sans aucune
+# activité finit par être mis en pause. Cette tâche l'interroge tous les 3 jours.
+name: Réveil Supabase
+
+on:
+  schedule:
+    - cron: '17 9 */3 * *'   # tous les 3 jours à 9h17 UTC
+  workflow_dispatch:          # bouton « Run workflow » pour tester à la main
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Interroger la base
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          code=$(curl -s -o /tmp/rep.json -w '%{http_code}' \
+            "$SUPABASE_URL/rest/v1/parties?select=code&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+          echo "Réponse HTTP : $code"
+          cat /tmp/rep.json
+          if [ "$code" != "200" ]; then
+            echo "::error::La base n'a pas répondu correctement (HTTP $code)"
+            exit 1
+          fi
+          echo "✅ Base réveillée"
