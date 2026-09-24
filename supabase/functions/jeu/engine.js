@@ -9,6 +9,7 @@
  * Formats : classique, face à face, survie, équipes, « le plus rapide ».
  */
 
+export const EPOQUES = ['Avant 1970', 'Années 70', 'Années 80', 'Années 90', 'Années 2000', 'Années 2010', 'Années 2020'];
 export const TYPES = ['QCM', 'VF', 'ESTIMATION', 'ORDRE', 'CARTE'];
 export const FORMATS = ['classique', 'face', 'survie', 'equipes', 'buzzer'];
 export const TEAM_NAMES = ['🔴 Rouges', '🔵 Bleus', '🟢 Verts', '🟡 Jaunes'];

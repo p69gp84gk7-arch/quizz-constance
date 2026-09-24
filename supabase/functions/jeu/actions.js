@@ -201,21 +201,34 @@ export function createActions(db) {
 
       /* ---------------- Préparation ---------------- */
 
+      /** Inventaire de la banque : sert à tous les menus de la préparation. */
       case 'adminCatalog': {
         const qs = await allQuestions();
-        const count = key => {
-          const m = {};
-          qs.forEach(q => { const v = String(q[key] || ''); if (v) m[v] = (m[v] || 0) + 1; });
-          return Object.keys(m).sort().map(k => ({ name: k, n: m[k] }));
-        };
-        const cats = {};
-        qs.forEach(q => {
-          const t = String(q.theme), c = String(q.categorie || '');
-          cats[t] = cats[t] || [];
-          if (c && cats[t].indexOf(c) < 0) cats[t].push(c);
+        const out = { themes: {}, total: 0, withMedia: 0, photos: 0, cartes: 0, epoques: E.EPOQUES };
+        const inc = (o, k) => { o[k] = (o[k] || 0) + 1; };
+        qs.forEach(r => {
+          if (!r.question || String(r.actif || 'oui').toLowerCase() === 'non') return;
+          const th = String(r.theme || 'Divers');
+          const cat = String(r.categorie || '');
+          const d = Math.max(1, Math.min(5, Number(r.difficulte) || 1));
+          const era = String(r.epoque || '');
+          const type = String(r.type).toUpperCase();
+          const m = String(r.media_url || '').trim();
+          const t = out.themes[th] = out.themes[th]
+            || { count: 0, levels: [0, 0, 0, 0, 0], cats: {}, eras: {}, types: {}, dates: 0, erasDates: {}, photos: 0, sons: 0 };
+          t.count++;
+          t.levels[d - 1]++;
+          inc(t.types, type);
+          if (cat) inc(t.cats, cat);
+          if (era) inc(t.eras, era);
+          if (E.isDateQ(r)) { t.dates++; if (era) inc(t.erasDates, era); }
+          if (E.isImage(m)) { t.photos++; out.photos++; }
+          if (/youtu/.test(m) || /\.(mp3|m4a|aac|ogg|wav)(\?|$)/i.test(m)) t.sons++;
+          if (type === 'CARTE') out.cartes++;
+          out.total++;
+          if (m) out.withMedia++;
         });
-        Object.keys(cats).forEach(t => cats[t].sort());
-        return { total: qs.length, themes: count('theme'), eras: count('epoque'), cats: cats };
+        return out;
       }
 
       case 'adminCreateGame': {

@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Le Quizz de Constance — écran</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Playfair+Display:wght@600;800&family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  body { font-size: clamp(16px, 1.6vw, 34px); }
+  .stage { height: 100vh; padding: 3vh 4vw; display: flex; flex-direction: column; gap: 2.5vh; }
+  .bar { display: flex; align-items: center; gap: 1vw; font-size: .9em; }
+  .q { font-family: var(--font-title); font-weight: 800; font-size: 2.1em; line-height: 1.15; text-align: center; }
+  .choices.tv { gap: 2vh 2vw; }
+  .choices.tv .choice { min-height: 13vh; font-size: 1.35em; padding: 2vh 2vw; }
+  .main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 3vh; min-height: 0; }
+  .ring { position: relative; width: 11vh; height: 11vh; flex: none; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring .n { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--font-title); font-weight: 800; font-size: 2em; }
+  .lobby { display: grid; grid-template-columns: auto 1fr; gap: 4vw; align-items: center; flex: 1; }
+  .qr { background: #fff; padding: 2vh; border-radius: var(--radius); }
+  .qr img, .qr canvas { width: 38vh !important; height: 38vh !important; display: block; }
+  .code { font-family: var(--font-title); font-size: 4em; font-weight: 800; letter-spacing: .15em; color: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 1vh 1vw; }
+  .chips .pill { font-size: 1.1em; padding: .4em 1em; }
+  .rank-row { display: grid; grid-template-columns: 3em 1fr auto; gap: 1vw; align-items: center; padding: 1.2vh 1.5vw; border-radius: var(--radius); background: var(--card); border: 1px solid var(--card-border); font-size: 1.3em; }
+  .rank-row b { font-family: var(--font-title); }
+  .podium { display: flex; align-items: flex-end; justify-content: center; gap: 2vw; }
+  .podium .step { width: 18vw; text-align: center; }
+  .podium .block { border-radius: var(--radius) var(--radius) 0 0; background: var(--accent); color: var(--accent-text); font-family: var(--font-title); font-weight: 800; font-size: 3em; display: grid; place-items: center; }
+  #unlock { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(0,0,0,.75); cursor: pointer; text-align: center; }
+  .order-list { display: flex; flex-direction: column; gap: 1.2vh; max-width: 70vw; margin: 0 auto; width: 100%; }
+  .order-list .it { padding: 1.6vh 2vw; border-radius: var(--radius); background: var(--card); border: 1px solid var(--card-border); font-size: 1.3em; font-weight: 700; display: flex; gap: 1vw; }
+  .order-list .it.good { border-color: var(--ok); }
+  .intro-count { width: 22vh; height: 22vh; border-radius: 50%; margin: 2vh auto 0; display: grid; place-items: center;
+    background: var(--accent); color: var(--accent-text); font-family: var(--font-title); font-weight: 800; font-size: 5em; animation: pulse 1s infinite; }
+  @keyframes pulse { 0% { transform: scale(1) } 50% { transform: scale(1.08) } 100% { transform: scale(1) } }
+  .big-answer { font-family: var(--font-title); font-size: 3.5em; font-weight: 800; text-align: center; color: var(--accent); }
+  .qmap { height: 52vh; flex: none; }
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) 30vw; gap: 2vw; align-items: start; flex: none; }
+  .split .qmap { height: 46vh; }
+  /* Question carte : le texte en haut, la carte prend toute la place restante */
+  .main.mapmode { justify-content: flex-start; gap: 1.6vh; }
+  .mapmode .q { font-size: 1.7em; flex: none; }
+  .mapmode > .qmap { flex: 1; height: auto; min-height: 30vh; }
+  .mapsplit { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 34vw; gap: 1.5vw; }
+  .mapsplit .qmap { height: 100%; min-height: 0; }
+  .side { display: flex; flex-direction: column; gap: .8vh; min-height: 0; overflow: hidden; }
+  .km-row { display: grid; grid-template-columns: 1.6em minmax(0, 1fr) auto 4.2em; gap: .8vw; align-items: center; padding: .7vh 1vw; border-radius: 12px; background: var(--card); border: 1px solid var(--card-border); font-size: .95em; }
+  .km-row > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+  .km-row b, .km-row .tm { text-align: right; font-variant-numeric: tabular-nums; }
+  .km-row .tm { color: var(--muted); }
+  .km-row.head { background: none; border: 0; padding-top: 0; padding-bottom: 0; font-size: .7em; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .km-row.first { border: 2px solid var(--accent); }
+  .star-banner { align-self: center; text-align: center; padding: .6em 1.4em; border-radius: 999px; background: var(--accent); color: var(--accent-text); font-family: var(--font-title); font-weight: 800; font-size: 1.35em; }
+  .star-banner .more { font-weight: 600; font-size: .7em; opacity: .85; }
+  .side .star-banner { align-self: stretch; border-radius: var(--radius); font-size: 1.1em; padding: .5em .8em; }
+  .duel { display: flex; align-items: center; justify-content: center; gap: 2vw; font-family: var(--font-title); font-weight: 800; font-size: 1.6em; }
+  .duel .vs { color: var(--accent); font-size: 1.3em; }
+  .duel .p { padding: .3em .9em; border-radius: var(--radius); background: var(--card); border: 2px solid var(--card-border); }
+  .duel .p.in { border-color: var(--ok); }
+  .team-row { display: grid; grid-template-columns: 3em 1fr auto; gap: 1vw; align-items: center; padding: 1.5vh 1.5vw; border-radius: var(--radius); background: var(--card); border: 1px solid var(--card-border); font-size: 1.5em; }
+  .media-img { max-height: 42vh; }
+</style>
+</head>
+<body data-visual="plateau">
+<div id="unlock"><div><div style="font-size:5em">📺</div><h1>Écran public</h1><p class="muted">Cliquez ou touchez l'écran pour l'activer (son et blind test)</p></div></div>
+<div class="stage" id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="commun.js"></script>
+<script>
+/* Sans paramètre, l'écran suit tout seul la dernière partie créée : aucun rechargement entre deux parties. */
+let CODE = (new URLSearchParams(location.search).get('p') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const URL_BASE = location.origin + location.pathname.replace(/ecran\.html$/, 'joueur.html');
+const S = { view: null, key: '', lastTick: -1, soundKey: '' };
+const app = $('#app');
+
+$('#unlock').onclick = () => { Sound.unlock(); YT_PLAYER.init(); AUDIO_PLAYER.unlock(); $('#unlock').remove(); };
+
+/* ---------- Temps réel : l'écran reçoit, il n'interroge plus ---------- */
+
+const LIVE = watchGame('game_live', onLive, switchTo);
+
+function nogame() {
+  if (S.key === 'NOGAME') return;
+  S.key = 'NOGAME';
+  app.innerHTML = '<div class="main center"><div style="font-size:5em">🎯</div><h1>En attente d\'une partie…</h1>'
+    + '<p class="muted">L\'écran s\'affichera tout seul dès que le maître du jeu créera une partie.</p></div>';
+}
+
+/** Bascule sur une nouvelle partie, sans rechargement. */
+function switchTo(code) {
+  if (!code || code === CODE) return;
+  CODE = code;
+  S.key = ''; S.soundKey = '';
+  MediaSync.lastSeq = null;
+  MEDIA_PLAYER.stop();
+  LIVE.follow(code);
+}
+
+function onLive(state, row) {
+  state.version = row.seq;
+  S.view = state;
+  applyVisual(state.visual);
+  Sound.enabled = state.sounds;
+  if (state.audioOn === 'ecran') MediaSync.apply(state, state.question, true);
+  refresh(state);
+}
+
+/** Au démarrage : quelle partie suivre ? */
+function loop() {
+  rpc('screenGame', {}).then(r => {
+    if (!CODE && !r.code) { nogame(); setTimeout(loop, 5000); return; }
+    LIVE.start(CODE || r.code);
+    CODE = CODE || r.code;
+  }).catch(() => { nogame(); setTimeout(loop, 5000); });
+}
+
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') LIVE.refresh(); });
+
+function refresh(v) {
+  localPromote(v);
+  let key = [v.status, v.qIndex, v.chapter ? v.chapter.idx : ''].join('|');
+  if (v.status === 'LOBBY' || v.status === 'CHAPTER') key += '|' + (v.lobby || []).join(',');
+  if (['REVEAL', 'SCORES', 'END'].indexOf(v.status) >= 0) key += '|' + v.version;
+  if (key !== S.key) { S.key = key; render(v); playStatusSound(v); }
+  const ans = $('#answered');
+  if (ans && v.answeredCount !== undefined) ans.textContent = v.answeredCount + ' / ' + (v.format === 'face' && v.duel ? v.playerCount : v.format === 'survie' && v.survivors ? v.survivors.length : v.playerCount);
+}
+
+function playStatusSound(v) {
+  const k = v.status + v.qIndex;
+  if (k === S.soundKey) return;
+  S.soundKey = k;
+  if (v.status === 'QUESTION') Sound.start();
+  else if (v.status === 'REVEAL') Sound.reveal();
+  else if (v.status === 'END') Sound.fanfare();
+}
+
+function topBar(v) {
+  return `<div class="bar">
+    <span class="pill">Question ${v.qIndex + 1} / ${v.total}</span>
+    ${v.chapter && v.chapter.count > 1 ? `<span class="pill">${esc(v.chapter.name)}</span>` : ''}
+    ${v.question ? `<span class="pill">${esc(v.question.theme)}${v.question.cat ? ' · ' + esc(v.question.cat) : ''}</span>` : ''}
+    <span class="spacer"></span>
+    ${v.format !== 'classique' ? `<span class="pill">${FORMAT_LABELS[v.format]}${v.format === 'survie' && v.survivors ? ' · ' + v.survivors.length + ' en vie' : ''}</span>` : ''}
+    ${v.question ? multBadge(v.question) : ''}
+    ${v.question ? `<span class="pill" title="Difficulté">${levelStars(v.question.diff)}</span>` : ''}
+    <span class="pill">Code <b>${esc(v.code)}</b></span></div>`;
+}
+
+function choicesHtml(q, reveal) {
+  if (!q.choices) return '';
+  const total = reveal && reveal.dist ? reveal.dist.reduce((a, b) => a + b, 0) : 0;
+  return `<div class="choices tv">${q.choices.map((c, i) => {
+    let cls = '';
+    if (reveal) cls = i === reveal.correct ? 'good' : 'dim';
+    const n = reveal && reveal.dist ? reveal.dist[i] : null;
+    return `<div class="choice k${i} ${cls}"><span class="shape">${SHAPES[i]}</span><span>${esc(c)}</span>
+      ${n !== null ? `<span class="count">${n}</span><span class="bar" style="width:${total ? 100 * n / total : 0}%"></span>` : ''}</div>`;
+  }).join('')}</div>`;
+}
+
+const fmtS = t => t === null || t === undefined || isNaN(t) ? '' : String(t).replace('.', ',') + ' s';
+
+/** Le nom à mettre en avant : le plus près (carte, estimation) ou la bonne réponse la plus rapide. */
+function starHtml(v, r) {
+  const q = v.question;
+  if (v.format === 'buzzer' || (v.format === 'face' && v.duel)) return ''; // déjà annoncé par le bandeau du format
+  const t = r.top;
+  if (!t) return r.nbPlay && q.type !== 'ESTIMATION' && q.type !== 'CARTE' && !r.repechage ? '<div class="star-banner pop-in">😶 Personne n\'a trouvé !</div>' : '';
+  if (t.kind === 'proche') {
+    const d = q.type === 'CARTE' ? fmtKm(t.d) : esc(t.a);
+    return `<div class="star-banner pop-in">🎯 Le plus près : ${esc(t.pseudo)}<br><span class="more">${d}${t.t !== null ? ' · en ' + fmtS(t.t) : ''}</span></div>`;
+  }
+  const next = (r.fast || []).slice(1);
+  return `<div class="star-banner pop-in">⚡ Le plus rapide : ${esc(t.pseudo)} · ${fmtS(t.t)}${next.length ? `<br><span class="more">puis ${next.map(f => esc(f.pseudo) + ' (' + fmtS(f.t) + ')').join(', ')}</span>` : ''}</div>`;
+}
+
+function ringHtml() {
+  return `<div class="ring" id="ring"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="16" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="3"/>
+    <circle id="ringc" cx="18" cy="18" r="16" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-dasharray="100.5" stroke-dashoffset="0"/></svg>
+    <div class="n" id="ringn"></div></div>`;
+}
+
+function duelHtml(v, reveal) {
+  if (!v.duel || v.duel.length < 2) return '';
+  const w = reveal ? reveal.winner : null;
+  return `<div class="duel pop-in"><span class="p ${w === v.duel[0] ? 'in' : ''}">${w === v.duel[0] ? '🏆 ' : ''}${esc(v.duel[0])}</span>
+    <span class="vs">⚔️</span><span class="p ${w === v.duel[1] ? 'in' : ''}">${w === v.duel[1] ? '🏆 ' : ''}${esc(v.duel[1])}</span></div>`;
+}
+
+function teamsHtml(v) {
+  if (!v.teams) return '';
+  return `<div class="col" style="max-width:70vw;margin:0 auto;width:100%;gap:1.2vh">${v.teams.map((t, i) =>
+    `<div class="team-row fade-in" style="animation-delay:${i * 80}ms"><b>${t.rank}</b><span>${esc(t.name)} <span class="muted" style="font-size:.6em">${t.members.map(esc).join(', ')}</span></span><b>${t.score}</b></div>`).join('')}
+    <div class="center muted" style="font-size:.8em">Points d'équipe = moyenne par joueur</div></div>`;
+}
+
+function showMap(v, reveal) {
+  const el = $('#map');
+  const q = v.question;
+  if (!el || !q) return;
+  makeMap(el, q.zone, { interactive: false }).then(map => { if (reveal) drawMapReveal(map, reveal.target, reveal.pins, reveal.answerText); })
+    .catch(() => { el.innerHTML = '<div class="center muted" style="padding:2em">Carte indisponible</div>'; });
+}
+
+function render(v) {
+  const q = v.question;
+  switch (v.status) {
+    case 'LOBBY': {
+      const link = URL_BASE + '?p=' + v.code;
+      app.innerHTML = `
+        <div class="center"><h1 style="font-size:2.6em">🎯 ${esc(v.title)}</h1></div>
+        <div class="lobby">
+          <div class="col" style="align-items:center"><div class="qr" id="qr"></div>
+            <div class="muted" style="font-size:.8em">Scannez pour rejoindre</div></div>
+          <div class="col">
+            <div class="muted">Code de la partie</div><div class="code">${esc(v.code)}</div>
+            <div class="muted" style="font-size:.7em;word-break:break-all">${esc(link)}</div>
+            <h2 style="margin-top:3vh">${v.playerCount} joueur${v.playerCount > 1 ? 's' : ''}${v.format !== 'classique' ? ' · ' + FORMAT_LABELS[v.format] : ''}</h2>
+            ${v.teams ? v.teams.slice().sort((a, b) => a.team - b.team).map(t => `<div class="chips" style="margin-bottom:1vh"><b style="min-width:6em">${esc(t.name)}</b>${t.members.map(p => `<span class="pill pop-in">${esc(p)}</span>`).join('')}</div>`).join('')
+              : `<div class="chips">${(v.lobby || []).map(p => `<span class="pill pop-in">${esc(p)}</span>`).join('')}</div>`}
+            ${v.format === 'survie' ? `<div class="muted" style="margin-top:2vh">💀 Survie : ${v.lives} vie${v.lives > 1 ? 's' : ''} chacun. Une mauvaise réponse coûte une vie !</div>` : ''}
+            ${v.format === 'face' ? '<div class="muted" style="margin-top:2vh">⚔️ À chaque question, deux joueurs s\'affrontent : le plus rapide à trouver gagne.</div>' : ''}
+            ${v.format === 'buzzer' ? '<div class="muted" style="margin-top:2vh">⚡ Seule la première bonne réponse rapporte des points !</div>' : ''}
+          </div></div>`;
+      if (window.QRCode) new QRCode($('#qr'), { text: link, width: 512, height: 512, correctLevel: QRCode.CorrectLevel.M });
+      break;
+    }
+    case 'CHAPTER':
+      app.innerHTML = `<div class="main center pop-in">
+        <div class="muted" style="font-size:1.4em">Chapitre ${v.chapter.idx} / ${v.chapter.count}</div>
+        <h1 style="font-size:4.5em">${esc(v.chapter.name)}</h1>
+        <div class="muted" style="font-size:1.3em">${v.chapter.nb} questions${v.chapter.themes && v.chapter.themes.length ? ' · ' + v.chapter.themes.map(esc).join(', ') : ''}</div></div>`;
+      break;
+
+    case 'INTRO': {
+      const bt = q.media && q.media.kind === 'youtube';
+      app.innerHTML = `<div class="main center pop-in">
+        <div class="muted" style="font-size:1.3em">Question ${v.qIndex + 1} / ${v.total}${v.chapter && v.chapter.count > 1 ? ' · ' + esc(v.chapter.name) : ''}</div>
+        <div style="font-size:7em;line-height:1">${themeIcon(q)}</div>
+        <h1 style="font-size:4.5em;margin:0">${esc(introTitle(q))}</h1>
+        <div class="muted" style="font-size:1.3em">${q.cat ? esc(q.cat) + ' · ' : ''}${q.epoque ? esc(q.epoque) + ' · ' : ''}${typeLabel(q.type)} · ${levelStars(q.diff)}</div>
+        ${multBadge(q) ? `<div style="font-size:1.4em">${multBadge(q)}</div>` : ''}
+        ${duelHtml(v)}
+        <div class="intro-count" id="icount">${introLeft(v)}</div></div>`;
+      break;
+    }
+    case 'READ':
+    case 'QUESTION': {
+      const live = v.status === 'QUESTION';
+      let body = '';
+      if (q.type === 'ESTIMATION') body = `<div class="center muted" style="font-size:1.4em">✍️ Répondez sur votre téléphone${q.unit ? ' (en ' + esc(q.unit) + ')' : ''}</div>`;
+      else if (q.type === 'ORDRE') body = `<div class="center muted">${esc(q.hint)}</div><div class="order-list">${q.items.map(it => `<div class="it">${esc(it)}</div>`).join('')}</div>`;
+      else if (q.type === 'CARTE') body = `<div id="map" class="qmap"></div>`;
+      else body = choicesHtml(q, null);
+      const carte = q.type === 'CARTE';
+      app.innerHTML = topBar(v) + `<div class="main fade-in${carte ? ' mapmode' : ''}">
+          ${duelHtml(v)}
+          ${carte ? '' : mediaHtml(q, true, live ? { start: q.start, duration: v.duration } : null)}
+          <div class="q">${esc(q.text)}</div>${body}</div>
+        <div class="row">${live ? ringHtml() : '<span class="pill">🎤 Écoutez la question…</span>'}
+          ${carte ? '<span class="pill">📍 Placez le point sur votre téléphone</span>' : ''}
+          <span class="spacer"></span>${live ? `<span class="pill" style="font-size:1.2em">📨 <span id="answered">${v.answeredCount || 0} / ${v.playerCount}</span></span>` : ''}</div>`;
+      if (q.type === 'CARTE') showMap(v, null);
+      break;
+    }
+
+    case 'REVEAL': {
+      const r = v.reveal;
+      let body = '';
+      if (q.type === 'ESTIMATION') {
+        body = `<div class="big-answer pop-in">${esc(r.answerText)}</div>
+          ${r.tol !== null && r.tol !== undefined ? `<div class="center muted">Accepté à ± ${Math.round(r.tol * 100) / 100}</div>` : ''}
+          <div class="col" style="max-width:60vw;margin:0 auto;width:100%">${(r.closest || []).map(c =>
+            `<div class="rank-row" style="grid-template-columns:2em 1fr auto 4.5em"><span>${c.ok ? '✅' : '❌'}</span><span>${esc(c.pseudo)}</span><b>${esc(c.a)}</b><span class="muted" style="text-align:right;font-size:.8em">${fmtS(c.t)}</span></div>`).join('')}</div>`;
+      } else if (q.type === 'ORDRE') {
+        body = `<div class="order-list">${r.order.map((it, i) => `<div class="it good pop-in"><b>${i + 1}.</b> ${esc(it)}</div>`).join('')}</div>`;
+      } else if (q.type === 'CARTE') {
+        const rows = (r.closest || []).slice(0, 10);
+        body = `<div class="mapsplit"><div id="map" class="qmap"></div>
+          <div class="side"><div class="big-answer pop-in" style="font-size:1.5em">📍 ${esc(r.answerText)}</div>
+            ${starHtml(v, r)}
+            ${rows.length ? `<div class="km-row head"><span></span><span>Joueur</span><span>Distance</span><span style="text-align:right">Temps</span></div>
+            ${rows.map((c, i) => `<div class="km-row fade-in${i === 0 ? ' first' : ''}" style="animation-delay:${i * 60}ms"><span>${i === 0 ? '🎯' : c.ok ? '✅' : '❌'}</span><span>${esc(c.pseudo)}</span><b>${fmtKm(c.d)}</b><span class="tm">${fmtS(c.t)}</span></div>`).join('')}`
+              : '<div class="center muted">Personne n\'a placé de point</div>'}
+            ${r.expl ? `<div class="card fade-in" style="font-size:.8em;padding:.8em 1em">💡 ${esc(r.expl)}</div>` : ''}</div></div>`;
+      } else {
+        body = choicesHtml(q, r);
+      }
+      const banner = [];
+      if (r.winner && v.format === 'buzzer') banner.push(`⚡ ${esc(r.winner)} a été le plus rapide !`);
+      if (v.format === 'face' && v.duel) banner.push(r.winner ? `⚔️ ${esc(r.winner)} remporte le duel !` : '⚔️ Duel nul : personne ne marque');
+      if (v.format === 'survie') {
+        if (r.repechage) banner.push('😅 Tout le monde s\'est trompé : repêchage, personne ne perd de vie !');
+        else if (r.eliminated && r.eliminated.length) banner.push('💀 Éliminé' + (r.eliminated.length > 1 ? 's' : '') + ' : ' + r.eliminated.map(esc).join(', '));
+        if (v.finished) banner.push('🏆 Il ne reste qu\'un survivant !');
+      }
+      const carte = q.type === 'CARTE';
+      app.innerHTML = topBar(v) + `<div class="main${carte ? ' mapmode' : ''}">
+          ${q.media && q.media.kind === 'image' && !carte ? mediaHtml(q, false) : ''}
+          <div class="q" style="font-size:1.6em">${esc(q.text)}</div>
+          ${banner.map(b => `<div class="center pop-in" style="font-family:var(--font-title);font-weight:800;font-size:1.4em;color:var(--accent)">${b}</div>`).join('')}
+          ${body}
+          ${carte ? '' : starHtml(v, r)}
+          ${r.expl && !carte ? `<div class="card center fade-in">💡 ${esc(r.expl)}</div>` : ''}</div>
+        <div class="row"><span class="pill" style="font-size:1.2em">✅ ${r.nbOk} / ${r.nbPlay !== undefined ? r.nbPlay : v.playerCount} · ${Math.round(r.rate * 100)} %</span>
+          ${r.mult > 1 ? `<span class="pill accent">Points ×${r.mult}</span>` : ''}
+          <span class="spacer"></span>${r.levelUp ? '<span class="pill accent pop-in" style="font-size:1.2em">⬆ Ça monte d\'un cran !</span>' : ''}</div>`;
+      if (q.type === 'CARTE') showMap(v, r);
+      break;
+    }
+
+    case 'SCORES':
+      app.innerHTML = `<h1 class="center" style="font-size:2.6em">🏆 Classement</h1>
+        ${v.teams ? teamsHtml(v) + '<h2 class="center" style="margin-top:2vh">Joueurs</h2>' : ''}
+        <div class="col" style="max-width:70vw;margin:0 auto;width:100%;gap:1.2vh">${(v.ranking || []).slice(0, v.teams ? 6 : 10).map((p, i) =>
+          `<div class="rank-row fade-in" style="animation-delay:${i * 60}ms"><b>${p.rank}</b><span>${esc(p.pseudo)}${rankExtra(v, p)}</span><b>${p.score}</b></div>`).join('')}</div>`;
+      break;
+
+    case 'END': {
+      const rk = v.ranking || [];
+      const step = (p, h, medal) => p ? `<div class="step pop-in"><div style="font-size:3em">${medal}</div><h2>${esc(p.pseudo)}</h2>
+          <div class="muted">${p.score} pts</div><div class="block" style="height:${h}vh">${p.rank}</div></div>` : '<div class="step"></div>';
+      if (v.teams) {
+        app.innerHTML = `<h1 class="center" style="font-size:3em">🎉 Victoire des ${esc(v.teams[0].name)} !</h1><div class="main">${teamsHtml(v)}
+          <div class="chips" style="justify-content:center">${rk.slice(0, 10).map(p => `<span class="pill">${p.rank}. ${esc(p.pseudo)} · ${p.score}</span>`).join('')}</div></div>`;
+        break;
+      }
+      app.innerHTML = `<h1 class="center" style="font-size:3em">🎉 Fin de la partie !</h1>
+        <div class="main"><div class="podium">${step(rk[1], 22, '🥈')}${step(rk[0], 32, '🥇')}${step(rk[2], 15, '🥉')}</div>
+        <div class="chips" style="justify-content:center">${rk.slice(3).map(p => `<span class="pill">${p.rank}. ${esc(p.pseudo)} · ${p.score}</span>`).join('')}</div></div>`;
+      break;
+    }
+  }
+}
+
+function rankExtra(v, p) {
+  if (v.format === 'survie') return ' ' + (p.out ? '<span class="muted" style="font-size:.7em">💀 éliminé Q' + p.out + '</span>' : '<span style="font-size:.7em">' + hearts(p.lives, v.lives) + '</span>');
+  if (v.format === 'face') return p.duelWins ? ' <span class="muted" style="font-size:.7em">⚔️ ' + p.duelWins + ' duel' + (p.duelWins > 1 ? 's' : '') + ' gagné' + (p.duelWins > 1 ? 's' : '') + '</span>' : '';
+  if (v.format === 'equipes' && v.teams) { const t = v.teams.filter(x => x.team === p.team)[0]; return t ? ' <span style="font-size:.7em">' + t.name.split(' ')[0] + '</span>' : ''; }
+  return '';
+}
+
+/* Chrono circulaire + tic-tac des 5 dernières secondes */
+setInterval(() => {
+  const v = S.view;
+  if (v && v.status === 'INTRO') {
+    const left = introLeft(v);
+    const c = $('#icount');
+    if (c && c.textContent !== String(left)) { c.textContent = left; if (left > 0) Sound.tick(); }
+    if (left <= 0) refresh(v); // fin du compte à rebours : la question s'affiche
+    return;
+  }
+  if (!v || v.status !== 'QUESTION' || !v.question) return;
+  const rem = Clock.remaining(v.question.start, v.duration);
+  const c = $('#ringc'), n = $('#ringn');
+  if (c) { c.style.strokeDashoffset = 100.5 * (1 - rem / v.duration); c.style.stroke = rem <= 5 ? 'var(--ko)' : 'var(--accent)'; }
+  if (n) n.textContent = Math.ceil(rem);
+  const sec = Math.ceil(rem);
+  if (sec <= 5 && sec > 0 && sec !== S.lastTick) { S.lastTick = sec; Sound.tick(); }
+  const eq = $('#eq');
+  if (eq) eq.classList.toggle('paused', rem <= 0);
+}, 200);
+
+loop();
+</script>
+</body>
+</html>

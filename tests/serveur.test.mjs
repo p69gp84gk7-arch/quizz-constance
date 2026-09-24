@@ -56,7 +56,8 @@ console.log('\n1. Partie complète : création, arrivée des joueurs, questions,
 {
   const { db, handle } = fresh();
   const mj = await handle('adminCreateGame', {
-    settings: { chapters: [{ name: 'Soirée', nb: 4, level: 1 }], points: 'rapidite', duration: 30, estimQcm: 'libre' },
+    // types imposés : le test vérifie le parcours complet, pas le tirage
+    settings: { chapters: [{ name: 'Soirée', nb: 4, level: 1, types: ['QCM', 'VF'] }], points: 'rapidite', duration: 30 },
   });
   const code = mj.code;
   ok(/^[A-Z0-9]{4}$/.test(code), 'partie créée, code ' + code);
@@ -87,7 +88,7 @@ console.log('\n1. Partie complète : création, arrivée des joueurs, questions,
     const good = q.correct;
     const answers = [];
     for (let i = 0; i < 3; i++) {
-      const a = q.choices ? (i === 0 ? good : (good + 1) % q.choices.length) : 0;
+      const a = i === 0 ? good : (good + 1) % q.choices.length;
       answers.push(await handle('playerAnswer', { code, pid: PIDS[i], qIndex: g.qIndex, answer: a }));
     }
     ok(answers.every(a => a.ok), 'les trois réponses sont enregistrées');

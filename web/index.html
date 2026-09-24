@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Le Quizz de Constance — maître du jeu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Playfair+Display:wght@600;800&family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  body { font-size: 15px; }
+  .shell { max-width: 1400px; margin: 0 auto; padding: 12px 16px 60px; }
+  nav.tabs { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  nav.tabs .tab { padding: 10px 16px; border-radius: 999px; cursor: pointer; font-weight: 700; background: transparent; border: 1px solid transparent; }
+  nav.tabs .tab.active { background: var(--card); border-color: var(--card-border); }
+  .brand { font-family: var(--font-title); font-weight: 800; font-size: 20px; margin-right: 12px; }
+  .live { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+  /* ---------- Adaptation à l'écran ---------- */
+  @media (max-width: 1100px) { .live { grid-template-columns: minmax(0, 1fr) 280px; } .qbig { font-size: 22px; } }
+  @media (min-width: 1600px) { .shell { max-width: 1760px; } .live { grid-template-columns: minmax(0, 1fr) 420px; } .qbig { font-size: 30px; } body { font-size: 16px; } }
+  @media (hover: none) and (pointer: coarse) {
+    .btn { min-height: 44px; } .btn.small { min-height: 38px; } .chip { padding: 9px 14px; font-size: 15px; }
+    .player { padding: 10px 6px; } .player .x { font-size: 18px; padding: 4px 8px; }
+  }
+  @media (max-width: 700px) {
+    body { font-size: 15px; }
+    .shell { padding: 0 10px 96px; }
+    nav.tabs { position: sticky; top: 0; z-index: 25; flex-wrap: nowrap; overflow-x: auto; margin: 0 -10px 10px; padding: 8px 10px; background: var(--solid); border-bottom: 1px solid var(--card-border); scrollbar-width: none; }
+    nav.tabs::-webkit-scrollbar { display: none; }
+    nav.tabs .tab { padding: 8px 12px; white-space: nowrap; flex: none; }
+    .brand { display: none; }
+    .live { grid-template-columns: 1fr; }
+    /* backdrop-filter ferait de la carte le repère de la barre d'action « fixe » : on le coupe sur téléphone */
+    .card { padding: 12px; backdrop-filter: none; -webkit-backdrop-filter: none; }
+    .qbig { font-size: 20px; }
+    .choices.admin { grid-template-columns: 1fr; gap: 8px; }
+    .choices.admin .choice { min-height: 44px; padding: 8px 12px; }
+    .grid2 { grid-template-columns: 1fr !important; }
+    .kbd, .hide-phone { display: none !important; }
+    .actions.main-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; margin: 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+      background: var(--solid); border-top: 1px solid var(--card-border); box-shadow: 0 -6px 20px rgba(0,0,0,.35); flex-wrap: nowrap; }
+    .actions.main-actions .btn.big { flex: 1; padding: 14px 10px; font-size: 17px; }
+    .modal { padding: 12px; }
+    table.tbl th, table.tbl td { padding: 6px 5px; font-size: 13px; }
+    h1 { font-size: 26px; } h2 { font-size: 20px; }
+  }
+  .settings-card summary::-webkit-details-marker { display: none; }
+  .anecdote { border-color: var(--ok); }
+  .fiche summary { cursor: pointer; }
+  .qbig { font-family: var(--font-title); font-size: 26px; font-weight: 800; line-height: 1.2; }
+  .answer-box { border: 2px solid var(--ok); border-radius: 12px; padding: 10px 14px; }
+  .answer-box .lbl2 { font-size: 12px; font-weight: 700; color: var(--ok); text-transform: uppercase; letter-spacing: .05em; }
+  .hint-box { border: 1px dashed var(--accent); border-radius: 12px; padding: 10px 14px; }
+  .player { display: grid; grid-template-columns: 12px 1fr auto auto 22px; gap: 8px; align-items: center; padding: 8px 6px; border-bottom: 1px solid var(--card-border); }
+  .player .nm { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .player .st { font-size: 13px; color: var(--muted); }
+  .player .sc { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .player .x { cursor: pointer; opacity: .4; background: none; border: 0; padding: 0; }
+  .player .x:hover { opacity: 1; }
+  .choices.admin .choice { min-height: 54px; font-size: 16px; padding: 10px 14px; }
+  .chip { display: inline-block; padding: 6px 12px; margin: 3px; border-radius: 999px; cursor: pointer; border: 1px solid var(--card-border); background: transparent; font-size: 14px; }
+  .chip.on { background: var(--accent); color: var(--accent-text); border-color: transparent; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .chapter { border-left: 4px solid var(--accent); }
+  .kbd { font-size: 12px; opacity: .6; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .mini-bar { height: 8px; border-radius: 4px; background: var(--accent); }
+  #qrbox { background: #fff; padding: 10px; border-radius: 12px; display: inline-block; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 60; display: grid; place-items: center; padding: 16px; }
+  .modal { max-width: 640px; width: 100%; max-height: 90vh; overflow: auto; background: var(--solid); background-image: var(--bg); }
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  .switch input { width: 18px; height: 18px; }
+</style>
+</head>
+<body data-visual="plateau">
+<script>
+  // Si un fichier est mal copié, on affiche l'erreur au lieu d'une page qui ne réagit pas
+  window.addEventListener('error', function (e) {
+    if (/extension:/.test(e.filename || '')) return; // erreur d'une extension du navigateur : sans rapport
+    var m = document.getElementById('loginMsg');
+    // on garde la PREMIÈRE erreur : c'est elle qui indique le fichier en cause
+    if (m && !m.dataset.err) { m.dataset.err = 1; m.style.color = '#ff4d5e'; m.textContent = '❌ Erreur dans la page : ' + e.message + ' (ligne ' + e.lineno + (e.filename ? ', ' + String(e.filename).split('?')[0].slice(-40) : '') + ')'; }
+  });
+</script>
+<div class="shell">
+  <div id="login" class="col" style="max-width:420px;margin:12vh auto;text-align:center">
+    <div style="font-size:60px">🎯</div>
+    <h1>Le Quizz de Constance</h1>
+    <p class="muted">Espace maître du jeu</p>
+    <div class="card col">
+      <input id="email" type="email" placeholder="Votre adresse e-mail" style="font-size:18px;text-align:center" autocomplete="username">
+      <input id="pin" type="password" placeholder="Mot de passe" style="font-size:18px;text-align:center" autocomplete="current-password">
+      <button class="btn primary big" id="loginBtn">Entrer</button>
+      <div id="loginMsg" class="muted" style="font-size:14px;min-height:1.2em"></div>
+    </div>
+    <div class="card col" style="margin-top:6px">
+      <div class="muted">Tu es joueur ? Scanne le QR code affiché par le maître du jeu, ou :</div>
+      <a class="btn" id="playerLink" href="#">🙋 Rejoindre une partie avec un code</a>
+    </div>
+  </div>
+
+  <div id="main" class="hidden">
+    <nav class="tabs">
+      <span class="brand">🎯 Le Quizz de Constance</span>
+      <button class="tab active" data-tab="partie">🎮 Partie</button>
+      <button class="tab" data-tab="preparer">🧩 Préparer</button>
+      <button class="tab" data-tab="questions">➕ Questions</button>
+      <button class="tab" data-tab="classement">🏆 Classement</button>
+      <span class="spacer"></span>
+      <button class="btn small" id="helpBtn">📺<span class="hide-phone"> Aide diffusion</span></button>
+    </nav>
+    <section id="tab-partie"></section>
+    <section id="tab-preparer" class="hidden"></section>
+    <section id="tab-questions" class="hidden"></section>
+    <section id="tab-classement" class="hidden"></section>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="commun.js"></script>
+<script src="admin-jeu.js"></script>
+<script src="admin-prep.js"></script>
+<script>
+  const URL_BASE = location.origin + location.pathname.replace(/[^/]*$/, '');
+  boot();
+</script>
+</body>
+</html>

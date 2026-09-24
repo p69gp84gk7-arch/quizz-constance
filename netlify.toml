@@ -1,0 +1,10 @@
+# Mise en ligne du site : Netlify publie simplement le dossier « web ».
+[build]
+  publish = "web"
+  command = ""
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

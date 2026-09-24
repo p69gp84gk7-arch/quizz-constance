@@ -170,6 +170,11 @@ create table if not exists montages (
 -- 6. Classement général : calculé par la base, aucun recalcul à lancer
 -- ------------------------------------------------------------------
 create or replace view classement as
+with par_partie as (
+  select game_code, pseudo, sum(points) as pts
+  from answers where correct is not null
+  group by game_code, pseudo
+)
 select
   a.pseudo,
   count(distinct a.game_code)                                        as parties,
@@ -179,10 +184,11 @@ select
   count(*)                                                           as questions,
   round(100.0 * count(*) filter (where a.correct) / nullif(count(*), 0), 1) as reussite_pct,
   round(avg(a.temps), 1)                                             as temps_moyen_s,
+  (select max(pp.pts) from par_partie pp where pp.pseudo = a.pseudo)  as meilleur_score,
   max(a.created_at)                                                  as derniere_partie
 from answers a
 left join parties p on p.code = a.game_code
-where a.correct is not null                -- seulement les questions déjà corrigées
+where a.correct is not null
 group by a.pseudo;
 
 create or replace view classement_par_theme as
