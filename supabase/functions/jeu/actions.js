@@ -25,11 +25,15 @@ export function createActions(db) {
 
   /* ---------------- Lecture ---------------- */
 
+  // Pour composer une partie, seules ces colonnes servent : inutile de transporter
+  // les explications, indices et anecdotes des 1 521 questions.
+  const COLS_LEGERES = 'id,theme,categorie,difficulte,type,question,reponse,media_url,epoque,actif,utilisations';
+
   /** Toutes les questions (au-delà de la limite de 1 000 lignes par requête). */
-  async function allQuestions() {
+  async function allQuestions(cols) {
     const out = [];
     for (let from = 0; ; from += 1000) {
-      const { data } = check(await db.from('questions').select('*').range(from, from + 999));
+      const { data } = check(await db.from('questions').select(cols || '*').range(from, from + 999));
       out.push(...(data || []));
       if (!data || data.length < 1000) break;
     }
@@ -213,7 +217,7 @@ export function createActions(db) {
 
       /** Inventaire de la banque : sert à tous les menus de la préparation. */
       case 'adminCatalog': {
-        const qs = await allQuestions();
+        const qs = await allQuestions(COLS_LEGERES);
         const out = { themes: {}, total: 0, withMedia: 0, photos: 0, cartes: 0, epoques: E.EPOQUES };
         const inc = (o, k) => { o[k] = (o[k] || 0) + 1; };
         qs.forEach(r => {
@@ -243,7 +247,7 @@ export function createActions(db) {
 
       case 'adminCreateGame': {
         const settings = E.normalizeSettings(p.settings);
-        const qs = await allQuestions();
+        const qs = await allQuestions(COLS_LEGERES);
         const pools = E.buildPools(settings, qs);
         const problems = [];
         settings.chapters.forEach((ch, i) => {

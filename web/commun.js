@@ -427,6 +427,16 @@ function makeMap(el, zone, opts) {
   });
 }
 
+/**
+ * Prépare la carte à l'avance (pendant la salle d'attente ou un compte à rebours) :
+ * le jour où une question de carte tombe, tout est déjà en mémoire.
+ */
+function preloadMap() {
+  if (preloadMap.done) return;
+  preloadMap.done = true;
+  loadLeaflet().then(() => loadBorders()).catch(() => {});
+}
+
 /** Frontières des pays (sans noms), dessinées par-dessus le relief. */
 let _borders = null;
 function loadBorders() {
@@ -437,7 +447,7 @@ function loadBorders() {
     s.onload = res; s.onerror = rej;
     document.head.appendChild(s);
   });
-  _borders = lib.then(() => fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json'))
+  _borders = lib.then(() => fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'))
     .then(r => r.json())
     .then(w => topojson.mesh(w, w.objects.countries, (x, y) => x !== y))
     .catch(() => { _borders = null; return null; });

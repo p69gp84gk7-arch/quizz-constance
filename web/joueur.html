@@ -140,6 +140,7 @@ function onLive(state, row) {
   applyVisual(v.visual);
   Sound.enabled = v.sounds;
   refresh();
+  if (['LOBBY', 'CHAPTER', 'INTRO', 'SCORES'].indexOf(v.status) >= 0) preloadMap();
   // À la révélation et à la fin, mon résultat personnel n'est pas dans la vitrine commune :
   // un seul appel suffit (au lieu d'une interrogation permanente).
   const mark = v.status + '|' + v.qIndex;

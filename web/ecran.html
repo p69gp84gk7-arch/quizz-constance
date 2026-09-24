@@ -108,6 +108,7 @@ function onLive(state, row) {
   S.view = state;
   applyVisual(state.visual);
   Sound.enabled = state.sounds;
+  if (['LOBBY', 'CHAPTER', 'INTRO', 'SCORES'].indexOf(state.status) >= 0) preloadMap();
   if (state.audioOn === 'ecran') MediaSync.apply(state, state.question, true);
   refresh(state);
 }
