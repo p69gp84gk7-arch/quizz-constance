@@ -1,7 +1,11 @@
 -- Mise à jour des deux vues de classement (ajout du meilleur score par joueur).
 -- À coller dans Supabase → SQL Editor → Run. Ne touche à aucune donnée.
 
-create or replace view classement as
+-- On supprime d'abord : Postgres refuse de changer l'ordre des colonnes d'une vue existante.
+drop view if exists classement_par_theme;
+drop view if exists classement;
+
+create view classement as
 with par_partie as (
   select game_code, pseudo, sum(points) as pts
   from answers where correct is not null
@@ -23,7 +27,7 @@ left join parties p on p.code = a.game_code
 where a.correct is not null
 group by a.pseudo;
 
-create or replace view classement_par_theme as
+create view classement_par_theme as
 select a.pseudo, a.theme,
        coalesce(sum(a.points), 0)        as points,
        count(*) filter (where a.correct) as bonnes_reponses,
