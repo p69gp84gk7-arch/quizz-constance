@@ -178,6 +178,9 @@ with par_partie as (
   select game_code, pseudo, sum(points) as pts
   from answers where correct is not null
   group by game_code, pseudo
+),
+meilleur as (
+  select pseudo, max(pts) as meilleur_score from par_partie group by pseudo
 )
 select
   a.pseudo,
@@ -188,10 +191,11 @@ select
   count(*)                                                           as questions,
   round(100.0 * count(*) filter (where a.correct) / nullif(count(*), 0), 1) as reussite_pct,
   round(avg(a.temps), 1)                                             as temps_moyen_s,
-  (select max(pp.pts) from par_partie pp where pp.pseudo = a.pseudo)  as meilleur_score,
+  max(m.meilleur_score)                                              as meilleur_score,
   max(a.created_at)                                                  as derniere_partie
 from answers a
 left join parties p on p.code = a.game_code
+left join meilleur m on m.pseudo = a.pseudo
 where a.correct is not null
 group by a.pseudo;
 

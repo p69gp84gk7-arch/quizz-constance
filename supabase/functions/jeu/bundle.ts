@@ -1537,6 +1537,9 @@ function createActions(db) {
  */
 
 
+/** Version du serveur : renvoyée par l'action « time », pour vérifier ce qui est déployé. */
+const BUILD = '2026-09-24-b';
+
 const db = createDb(
   Deno.env.get('SUPABASE_URL') ?? '',
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -1569,7 +1572,7 @@ Deno.serve(async (req) => {
     if (!action) return json({ ok: false, error: 'Action manquante.' }, 400);
     if (ADMIN_ACTIONS.has(action)) await requireMJ(req);
     const data = await handle(action, body);
-    return json({ ok: true, data: data, now: Date.now() });
+    return json({ ok: true, data: data, now: Date.now(), build: BUILD });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const auth = /Connexion du maître du jeu/.test(msg);
