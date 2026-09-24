@@ -5,6 +5,15 @@
  * Sert uniquement aux tests : rien ici ne part en production.
  */
 
+/** Valeurs par défaut des colonnes, comme Postgres les applique à l'insertion. */
+const DEFAULTS = {
+  game_live: { seq: 0, status: 'LOBBY', state: {} },
+  game_mj: { seq: 0, state: {} },
+  players: { vis: 'visible', exits: 0 },
+  answers: { points: 0 },
+  questions: { utilisations: 0, actif: 'oui' },
+};
+
 const UNIQUE = {
   questions: [['id']],
   games: [['code']],
@@ -95,7 +104,7 @@ export function makeDb() {
       if (op === 'insert') {
         const list = Array.isArray(payload) ? payload : [payload];
         for (const r of list) {
-          const row = Object.assign({ id: seq++ }, r);
+          const row = Object.assign({ id: seq++ }, DEFAULTS[table] || {}, r);
           const err = dupCheck(table, row, null);
           if (err) return { data: null, error: err };
           rows(table).push(row);
@@ -115,7 +124,7 @@ export function makeDb() {
             ? rows(table).find(x => cols.every(c => String(x[c]) === String(r[c]))) : null;
           if (existing) Object.assign(existing, JSON.parse(JSON.stringify(r)));
           else {
-            const row = Object.assign({ id: seq++ }, JSON.parse(JSON.stringify(r)));
+            const row = Object.assign({ id: seq++ }, DEFAULTS[table] || {}, JSON.parse(JSON.stringify(r)));
             const err = dupCheck(table, row, null);
             if (err) return { data: null, error: err };
             rows(table).push(row);

@@ -90,11 +90,13 @@ export function createActions(db) {
       code: st.code, status: st.status, state: st,
       ended_at: st.status === 'END' ? nowISO() : null,
     }, { onConflict: 'code' }));
+    // seq strictement croissant : les écrans ignorent les messages arrivés dans le désordre
+    const seq = Date.now();
     check(await db.from('game_live').upsert({
-      code: st.code, status: st.status, state: pub, updated_at: nowISO(),
+      code: st.code, status: st.status, state: pub, seq: seq, updated_at: nowISO(),
     }, { onConflict: 'code' }));
     check(await db.from('game_mj').upsert({
-      code: st.code, state: mj, updated_at: nowISO(),
+      code: st.code, state: mj, seq: seq, updated_at: nowISO(),
     }, { onConflict: 'code' }));
     return mj;
   }
