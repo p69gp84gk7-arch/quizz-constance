@@ -162,6 +162,11 @@ document.addEventListener('visibilitychange', () => {
   rpc('playerPresence', { code: S.code, pid: S.pid, vis: document.visibilityState }).catch(() => {});
   if (document.visibilityState === 'visible') LIVE.refresh();
 });
+// Signe de vie régulier : c'est ce qui allume la pastille verte chez le maître du jeu
+setInterval(() => {
+  if (S.joined && !document.hidden) rpc('playerPresence', { code: S.code, pid: S.pid, vis: 'visible' }).catch(() => {});
+}, 20000);
+
 window.addEventListener('online', () => { if (S.joined) LIVE.refresh(); });
 window.addEventListener('pageshow', () => { if (S.joined) LIVE.refresh(); });
 

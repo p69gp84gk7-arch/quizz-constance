@@ -775,7 +775,8 @@ export function adminView(st, players, answers) {
     const res = v.reveal && v.reveal.results ? v.reveal.results[p.pid] : null;
     const seen = p.lastSeen ? now - p.lastSeen : null;
     let presence = 'off';
-    if (seen !== null) presence = p.vis === 'hidden' ? 'bg' : (seen < 10000 ? 'on' : 'off');
+    // le téléphone donne signe de vie toutes les 20 s : on laisse de la marge pour le réseau
+    if (seen !== null) presence = p.vis === 'hidden' ? 'bg' : (seen < 45000 ? 'on' : 'off');
     return {
       pid: p.pid, pseudo: p.pseudo, score: p.score, good: p.good, time: p.time, streak: p.streak || 0, rank: p.rank,
       presence: presence, exits: p.exits || 0, lastSeen: seen === null ? null : Math.round(seen / 1000),

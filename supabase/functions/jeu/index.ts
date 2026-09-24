@@ -7,15 +7,17 @@
  *
  * Déploiement : Supabase → Edge Functions → jeu. Aucune variable à régler :
  * SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY sont fournies automatiquement.
+ *
+ * Aucune bibliothèque n'est téléchargée au démarrage : db.js parle directement à
+ * la base. C'est ce qui évite les réveils de 15 à 40 secondes.
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { createDb } from './db.js';
 import { createActions, ADMIN_ACTIONS } from './actions.js';
 
-const db = createClient(
+const db = createDb(
   Deno.env.get('SUPABASE_URL') ?? '',
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-  { auth: { persistSession: false, autoRefreshToken: false } },
 );
 
 const handle = createActions(db);
@@ -33,8 +35,8 @@ const json = (body, status = 200) =>
 async function requireMJ(req) {
   const jwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   if (!jwt) throw new Error('Connexion du maître du jeu nécessaire.');
-  const { data, error } = await db.auth.getUser(jwt);
-  if (error || !data?.user) throw new Error('Connexion du maître du jeu nécessaire.');
+  const user = await db.getUser(jwt);
+  if (!user) throw new Error('Connexion du maître du jeu nécessaire.');
 }
 
 Deno.serve(async (req) => {

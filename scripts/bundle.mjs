@@ -18,6 +18,7 @@ function strip(src) {
     .replace(/^\s*export\s*\{[^}]*\};\s*$/gm, '');
 }
 
+const dbjs = strip(read('db.js'));
 const engine = strip(read('engine.js'));
 const actions = strip(read('actions.js')).replace(/\bE\./g, '');   // le moteur est dans le même fichier
 // L'import de supabase-js est déjà en tête du fichier assemblé : on retire celui de l'entrée.
@@ -33,8 +34,8 @@ const out = `/**
  * À coller dans Supabase → Edge Functions → jeu → index.ts
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
-
+/* ================= BASE DE DONNÉES (db.js) ================= */
+${dbjs}
 /* ================= MOTEUR (engine.js) ================= */
 ${engine}
 /* ================= ACTIONS (actions.js) ================= */
