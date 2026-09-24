@@ -98,8 +98,9 @@ function showTab(name) {
 const MJ_LIVE = watchGame('game_mj', (state, row) => { state.version = row.seq; onView(state); });
 let ANSWERS = null;
 
+/** (Re)branche l'écoute temps réel sur la partie en cours. Rappelable : une nouvelle partie remplace l'ancienne. */
 function startPolling() {
-  if (A.polling || !A.code) return;
+  if (!A.code) return;
   A.polling = true;
   MJ_LIVE.start(A.code);
   // Chaque réponse qui arrive rafraîchit le tableau des joueurs, au plus une fois par seconde
