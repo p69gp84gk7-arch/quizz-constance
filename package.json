@@ -1,0 +1,9 @@
+{
+  "name": "quizz-constance",
+  "private": true,
+  "type": "module",
+  "description": "Le Quizz de Constance — sert uniquement à lancer les tests avec Node (node --test).",
+  "scripts": {
+    "test": "node tests/moteur.test.mjs && node tests/serveur.test.mjs"
+  }
+}
