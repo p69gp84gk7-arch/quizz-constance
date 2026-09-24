@@ -123,11 +123,12 @@ async function loadPage(file, url) {
   win.prompt = () => 'Montage de test';
   win.crypto = { getRandomValues: a => { for (let i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256); return a; } };
   win.AudioContext = function () { return { state: 'running', currentTime: 0, resume() {}, createOscillator: () => ({ frequency: { setValueAtTime() {} }, connect: () => ({ connect() {} }), start() {}, stop() {} }), createGain: () => ({ gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect: () => ({ connect() {} }) }) }; };
-  // On injecte les scripts comme le navigateur le ferait, dans l'ordre de la page
+  // On injecte les scripts dans <head> : sinon leur code source se retrouverait
+  // dans le texte de la page et fausserait les vérifications.
   const run = code => {
     const el = win.document.createElement('script');
     el.textContent = code;
-    win.document.body.appendChild(el);
+    win.document.head.appendChild(el);
   };
   for (const s of srcs) run(fs.readFileSync(path.join(ROOT, 'web', s), 'utf8'));
   run(inline);
