@@ -26,18 +26,18 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const json = (body: unknown, status = 200) =>
+const json = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
 /** Le maître du jeu est un vrai compte Supabase : lui seul voit les bonnes réponses. */
-async function requireMJ(req: Request) {
+async function requireMJ(req) {
   const jwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   if (!jwt) throw new Error('Connexion du maître du jeu nécessaire.');
   const { data, error } = await db.auth.getUser(jwt);
   if (error || !data?.user) throw new Error('Connexion du maître du jeu nécessaire.');
 }
 
-Deno.serve(async (req: Request) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   try {
     const body = await req.json().catch(() => ({}));

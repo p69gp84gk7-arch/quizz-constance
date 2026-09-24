@@ -58,3 +58,57 @@ les bonnes réponses et de piloter la partie.
 Les pages d'interface sont reprises telles quelles : tous les appels au serveur
 passent déjà par les deux fonctions `rpc()` et `act()`, c'est le seul endroit à
 remplacer.
+
+---
+
+## Étape 6 — Mettre la base à jour (à refaire une fois)
+
+Le moteur de jeu est écrit : la base a besoin de quelques tables de plus.
+
+1. Supabase → **SQL Editor** → **New query**.
+2. Collez de nouveau tout `schema.sql` (il a changé) et cliquez **Run**.
+
+⚠️ Ce script **recrée les tables de jeu** (parties, joueurs, réponses) : elles sont
+vides pour l'instant, donc rien n'est perdu. **Vos 1 521 questions ne sont pas touchées**,
+c'est écrit noir sur blanc en tête du fichier.
+
+## Étape 7 — Déployer la fonction serveur
+
+1. Supabase → **Edge Functions** (colonne de gauche) → **Deploy a new function**
+   → **Via Editor**.
+2. Nom de la fonction : **`jeu`** (exactement, en minuscules).
+3. Effacez le contenu de l'éditeur, puis collez tout le fichier
+   **`supabase/functions/jeu/bundle.ts`** (1 414 lignes : les trois fichiers du
+   serveur réunis, pour n'avoir qu'un copier-coller à faire).
+4. Cliquez **Deploy function**.
+
+Aucune clé à régler : Supabase fournit automatiquement `SUPABASE_URL` et
+`SUPABASE_SERVICE_ROLE_KEY` à la fonction.
+
+### Vérifier que ça répond
+
+Dans le terminal (remplacez les deux valeurs par les vôtres) :
+
+```sh
+curl -s -X POST "https://VOTRE-PROJET.supabase.co/functions/v1/jeu" \
+  -H "Authorization: Bearer VOTRE_CLE_ANON" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"time"}'
+```
+
+Réponse attendue : `{"ok":true,"data":{"now":1758...},"now":1758...}`
+
+## Étape 8 — Le compte du maître du jeu
+
+**Authentication → Users → Add user** : votre adresse et un mot de passe.
+Ce compte remplace le code PIN ; c'est lui qui aura le droit de voir les bonnes
+réponses et de piloter la partie.
+
+## Pour les curieux : comment c'est fait
+
+- `supabase/functions/jeu/engine.js` — les règles du jeu, sans réseau ni base.
+- `supabase/functions/jeu/actions.js` — les actions (créer, rejoindre, répondre…).
+- `supabase/functions/jeu/index.ts` — l'entrée Deno et le contrôle du compte MJ.
+- `supabase/functions/jeu/bundle.ts` — les trois réunis, **fichier engendré**,
+  reconstruit par `node scripts/bundle.mjs`.
+- `tests/` — les parties rejouées automatiquement : `npm test`.
