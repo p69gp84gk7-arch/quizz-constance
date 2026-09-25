@@ -267,7 +267,9 @@ console.log('\n3. L\'interface du maître du jeu');
   ok(/"autoName":true/.test(ch), 'le chapitre se nomme automatiquement');
   M.win.eval("A.draft.chapters[0].themes = ['Blind test musique']; refreshChapterNames(A.draft); renderPreparer();");
   await wait(40);
-  ok(M.win.eval('A.draft.chapters[0].name') === 'Blind test musique', 'le titre suit le thème coché');
+  // le titre reprend le thème, et mentionne aussi le type imposé plus haut
+  const titre = M.win.eval('A.draft.chapters[0].name');
+  ok(/^Blind test musique/.test(titre), 'le titre suit le thème coché : « ' + titre + ' »');
 
   M.doc.querySelector('[data-extraits]').click();
   await wait(200);
