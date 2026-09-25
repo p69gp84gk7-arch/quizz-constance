@@ -303,6 +303,8 @@ export function distance(a, b) {
 export function acceptedForms(rep, question) {
   const brut = String(rep || '');
   const formes = [brut];
+  // Titre à deux temps : « The Dark Knight : Le Chevalier noir » s'accepte des deux côtés
+  brut.split(/\s:\s/).map(x => x.trim()).forEach(x => { if (x.length >= 4) formes.push(x); });
   const parts = brut.split(/\s[–—-]\s|\s\/\s/).map(x => x.trim()).filter(x => x.length >= 3);
   const q = String(question || '');
   if (parts.length === 2) {
@@ -327,7 +329,10 @@ export function acceptedForms(rep, question) {
  * Sert à donner les indices (nombre de lettres, initiale) sans induire en erreur.
  */
 export function answerTarget(rep, question) {
-  const brut = String(rep || '').trim();
+  let brut = String(rep || '').trim();
+  // pour les indices, on vise la partie la plus parlante d'un titre à deux temps
+  const deuxTemps = brut.split(/\s:\s/).map(x => x.trim()).filter(x => x.length >= 4);
+  if (deuxTemps.length === 2) brut = deuxTemps[0];
   const parts = brut.split(/\s[–—-]\s|\s\/\s/).map(x => x.trim()).filter(x => x.length >= 3);
   if (parts.length !== 2) return brut;
   const q = String(question || '');
