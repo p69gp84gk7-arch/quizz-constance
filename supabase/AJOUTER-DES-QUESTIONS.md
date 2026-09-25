@@ -19,6 +19,9 @@ Les questions déjà présentes ne sont jamais touchées : seules les nouvelles 
 |---|---|
 | `questions.csv` | la banque d'origine, 1 521 questions (déjà importée) |
 | `questions-repliques.csv` | 58 répliques de film, thème Cinéma, catégorie Répliques |
+| `questions-blindtest.csv` | 105 extraits musicaux, thème Blind test musique |
+
+Importez-les l'un après l'autre : l'ordre n'a pas d'importance.
 
 ## En cas d'erreur « duplicate key »
 
