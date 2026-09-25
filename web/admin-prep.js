@@ -294,7 +294,7 @@ function chapterCard(c, i) {
  */
 const LIB_POINTS = { rapidite: 'rapidité', series: 'rapidité + séries', simple: '1 point' };
 const LIB_SAISIE = { auto: 'selon la difficulté', jamais: 'jamais (toujours 4 propositions)', toujours: 'toujours au clavier' };
-const LIB_NIVEAU = { 3: '★★★', 4: '★★★★', 4.5: '★★★★ et demie', 5: '★★★★★' };
+const LIB_NIVEAU = { 3: '★★★', 4: '★★★★', 4.5: '★★★★½', 5: '★★★★★' };
 
 /** Une ligne de résumé, pour lire les règles sans ouvrir le bloc. */
 function resumeRegles(r) {
@@ -310,7 +310,7 @@ function resumeRegles(r) {
 
 function reglesChapitre(c, i) {
   const r = c.regles || {};
-  const sel = (cle, libelles) => `<select data-cr="${cle}" style="width:auto">
+  const sel = (cle, libelles) => `<select data-cr="${cle}">
     ${Object.keys(libelles).map(k => {
       const val = typeof r[cle] === 'boolean' ? (r[cle] ? 'oui' : 'non') : String(r[cle]);
       return `<option value="${k}" ${val === k ? 'selected' : ''}>${libelles[k]}</option>`;
@@ -319,24 +319,24 @@ function reglesChapitre(c, i) {
   [10, 15, 20, 25, 30, 45, 60, 90].forEach(d => { durees[d] = d + ' s'; });
   return `<details class="settings-card" data-reg ${c.ouvert ? 'open' : ''}>
     <summary class="lbl" style="cursor:pointer">⚙️ Règles de ce chapitre — <span class="muted" style="font-weight:400">${esc(resumeRegles(r))}</span></summary>
-    <div class="grid2" style="margin-top:8px">
-      <label>Temps par question ${sel('duration', durees)}</label>
-      <label>Points ${sel('points', LIB_POINTS)}</label>
-      <label>Réponse tapée ${sel('saisie', LIB_SAISIE)}</label>
-      <label>… à partir de ${sel('saisieNiveau', LIB_NIVEAU)}</label>
-      <label>Propositions ${sel('choix', { adaptatifs: 'tirées au sort selon la difficulté', fixes: 'toujours celles de la banque' })}</label>
-      <label>Estimations ${sel('estimQcm', { auto: 'QCM, puis valeur exacte si dur', mixte: 'mélange', qcm: 'toujours en QCM', libre: 'toujours en réponse libre' })}</label>
-      <label>Estimation juste ${sel('estimation', { marge: 'si dans la marge', proche: 'le plus proche gagne' })}</label>
-      <label>Marge <input type="number" min="1" max="50" data-cn="margePct" value="${r.margePct}" style="width:70px"> %</label>
-      <label>Joker 50/50 ${sel('joker', { oui: 'autorisé', non: 'interdit' })}</label>
-      <label>Questions en or ${sel('bonus', { oui: 'oui (×2 au hasard)', non: 'non' })}</label>
-      <label>Révélation ${sel('autoReveal', { oui: 'à la fin du chrono', non: 'quand je le décide' })}</label>
+    <div class="regles">
+      <label>Temps par question${sel('duration', durees)}</label>
+      <label>Points${sel('points', LIB_POINTS)}</label>
+      <label>Réponse tapée${sel('saisie', LIB_SAISIE)}</label>
+      <label>… à partir de${sel('saisieNiveau', LIB_NIVEAU)}</label>
+      <label>Propositions${sel('choix', { adaptatifs: 'au hasard selon la difficulté', fixes: 'celles de la banque' })}</label>
+      <label>Estimations${sel('estimQcm', { auto: 'QCM, puis valeur exacte', mixte: 'mélange', qcm: 'toujours en QCM', libre: 'toujours en réponse libre' })}</label>
+      <label>Estimation juste${sel('estimation', { marge: 'si dans la marge', proche: 'le plus proche gagne' })}</label>
+      <label class="duo">Marge <input type="number" min="1" max="50" data-cn="margePct" value="${r.margePct}"> %</label>
+      <label>Joker 50/50${sel('joker', { oui: 'autorisé', non: 'interdit' })}</label>
+      <label>Questions en or${sel('bonus', { oui: 'oui (×2 au hasard)', non: 'non' })}</label>
+      <label>Révélation${sel('autoReveal', { oui: 'à la fin du chrono', non: 'quand je le décide' })}</label>
     </div>
-    <div class="row" style="margin-top:6px">
+    <div class="row" style="margin-top:10px">
       <button class="btn small" data-ccopy>📋 Ces règles pour tous les chapitres</button>
       <button class="btn small" data-creset>↺ Règles conseillées</button>
-      <span class="muted" style="font-size:12px">Écrire une réponse est bien plus dur que la choisir : c'est réservé aux questions à partir de ★★★★ et demie.</span>
     </div>
+    <div class="muted" style="font-size:12px">Écrire une réponse est bien plus dur que la choisir : réservé aux questions à partir de ★★★★½.</div>
   </details>`;
 }
 

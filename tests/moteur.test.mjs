@@ -377,6 +377,44 @@ console.log('\n8 quater. Les règles vivent dans le chapitre');
   ok(abime.duration === 120, 'une durée délirante dans un chapitre est ramenée dans les clous');
 }
 
+/* ================= 8 quinquies. Pause et reprise d'un extrait ================= */
+console.log('\n8 quinquies. Le son reprend après une pause');
+{
+  const st = {
+    status: 'QUESTION', settings: E.normalizeSettings({ duration: 30 }), chapIndex: 0,
+    media: { seq: 4, action: 'play' },
+    // question lancée il y a 28 s, mais mise en pause au bout de 8 s
+    current: { start: Date.now() - 28000, pausedMs: 0, pausedAt: null,
+      media: { kind: 'youtube', id: 'abc', start: 12, dur: 30 } },
+  };
+  E.pause(st);
+  ok(st.media.action === 'stop' && st.media.seq === 5, 'la pause coupe le son');
+  st.current.pausedAt = Date.now() - 20000;          // arrêtée depuis 20 s
+  E.resume(st);
+  ok(st.media.action === 'play', 'la reprise relance le son');
+  ok(st.media.seq === 6, 'avec un nouveau numéro, sinon les écrans l\'ignoreraient');
+  ok(st.media.offset >= 7.5 && st.media.offset <= 8.5, 'et reprend à ' + st.media.offset + ' s, là où il s\'était tu');
+  ok(st.current.pausedMs >= 19000, 'les 20 s d\'arrêt ne comptent pas dans le chrono');
+
+  // un extrait déjà terminé ne repart pas
+  const fini = {
+    status: 'QUESTION', settings: E.normalizeSettings({ duration: 30 }), chapIndex: 0,
+    media: { seq: 1, action: 'play' },
+    current: { start: Date.now() - 35000, pausedMs: 0, pausedAt: Date.now() - 1000,
+      media: { kind: 'youtube', id: 'abc', start: 0, dur: 30 } },
+  };
+  E.resume(fini);
+  ok(fini.media.action === 'stop', 'un extrait déjà fini ne redémarre pas');
+
+  // sans son, la reprise ne touche pas au média
+  const muet = {
+    status: 'QUESTION', settings: E.normalizeSettings({}), chapIndex: 0, media: { seq: 3, action: 'stop' },
+    current: { start: Date.now() - 5000, pausedMs: 0, pausedAt: Date.now() - 2000, media: null },
+  };
+  E.resume(muet);
+  ok(muet.media.seq === 3 && muet.media.action === 'stop', 'question sans extrait : rien à relancer');
+}
+
 /* ================= 8 ter. Où sort le son du blind test ================= */
 console.log('\n8 ter. Destination du son');
 {

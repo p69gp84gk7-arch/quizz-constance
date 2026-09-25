@@ -6,7 +6,7 @@
 <title>Quizz — maître du jeu</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Playfair+Display:wght@600;800&family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=2026-09-25-e">
+<link rel="stylesheet" href="styles.css?v=2026-09-25-f">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   body { font-size: 15px; }
@@ -36,7 +36,7 @@
     .qbig { font-size: 20px; }
     .choices.admin { grid-template-columns: 1fr; gap: 8px; }
     .choices.admin .choice { min-height: 44px; padding: 8px 12px; }
-    .grid2 { grid-template-columns: 1fr !important; }
+    .grid2, .regles { grid-template-columns: 1fr !important; }
     .kbd, .hide-phone { display: none !important; }
     .actions.main-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; margin: 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
       background: var(--solid); border-top: 1px solid var(--card-border); box-shadow: 0 -6px 20px rgba(0,0,0,.35); flex-wrap: nowrap; }
@@ -62,6 +62,13 @@
   .chip { display: inline-block; padding: 6px 12px; margin: 3px; border-radius: 999px; cursor: pointer; border: 1px solid var(--card-border); background: transparent; font-size: 14px; }
   .chip.on { background: var(--accent); color: var(--accent-text); border-color: transparent; }
   .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  /* Règles d'un chapitre : une étiquette au-dessus de chaque réglage, colonnes régulières */
+  .regles { display: grid; grid-template-columns: repeat(auto-fit, minmax(186px, 1fr)); gap: 8px 14px; margin-top: 10px; }
+  .regles label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; font-weight: 600; color: var(--muted); min-width: 0; }
+  .regles select, .regles input { width: 100%; padding: 6px 9px; font-size: 14px; }
+  .regles .duo { flex-direction: row; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  .regles .duo input { width: 72px; }
+  .settings-card > summary { padding: 4px 0; }
   .chapter { border-left: 4px solid var(--accent); }
   .kbd { font-size: 12px; opacity: .6; }
   .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -118,10 +125,10 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=2026-09-25-e"></script>
-<script src="commun.js?v=2026-09-25-e"></script>
-<script src="admin-jeu.js?v=2026-09-25-e"></script>
-<script src="admin-prep.js?v=2026-09-25-e"></script>
+<script src="config.js?v=2026-09-25-f"></script>
+<script src="commun.js?v=2026-09-25-f"></script>
+<script src="admin-jeu.js?v=2026-09-25-f"></script>
+<script src="admin-prep.js?v=2026-09-25-f"></script>
 <script>
   const URL_BASE = location.origin + location.pathname.replace(/[^/]*$/, '');
   boot();

@@ -193,6 +193,18 @@ console.log("\n1. Le téléphone d'un joueur, de l'arrivée au résultat");
   const choices = P.doc.querySelectorAll('.choice');
   ok(choices.length === q.choices.length, q.choices.length + ' propositions affichées');
 
+  // Pause du maître du jeu : le téléphone se fige, puis redevient cliquable
+  await handle('adminPause', { code });
+  push(P.subs, 'game_live', code);
+  await wait(320);
+  ok(P.doc.querySelector('#app').classList.contains('gele'), 'pendant la pause, les propositions ne répondent plus');
+  ok(P.doc.querySelector('#tpause').style.display !== 'none', 'et le bandeau lui dit pourquoi : ⏸ Pause');
+  await handle('adminResume', { code });
+  push(P.subs, 'game_live', code);
+  await wait(320);
+  ok(!P.doc.querySelector('#app').classList.contains('gele'), 'à la reprise, on peut répondre de nouveau');
+  ok(P.doc.querySelector('#tpause').style.display === 'none', 'et le bandeau de pause disparaît');
+
   choices[q.correct].click();
   await wait(60);
   ok(db.rows('answers').length === 1, 'la réponse part au serveur');

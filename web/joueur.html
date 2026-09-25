@@ -7,7 +7,7 @@
 <title>Quizz</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Playfair+Display:wght@600;800&family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=2026-09-25-e">
+<link rel="stylesheet" href="styles.css?v=2026-09-25-f">
 <style>
   body { min-height: 100vh; }
   .wrap { max-width: 560px; margin: 0 auto; padding: 14px 14px 40px; min-height: 100vh; display: flex; flex-direction: column; gap: 14px; }
@@ -41,8 +41,8 @@
 <div class="wrap" id="app"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=2026-09-25-e"></script>
-<script src="commun.js?v=2026-09-25-e"></script>
+<script src="config.js?v=2026-09-25-f"></script>
+<script src="commun.js?v=2026-09-25-f"></script>
 <script>
 /* Code de la partie : ?p=XXXX (QR code) ou saisi à la main. */
 const INIT_CODE = (new URLSearchParams(location.search).get('p') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -557,7 +557,8 @@ function localAnswerText(v) {
 /* ---------------- Chrono ---------------- */
 
 function timerHtml() {
-  return `<div class="row"><div class="timer grow" id="tbar"><div></div></div><span class="timer-num" id="tnum"></span></div>`;
+  return `<div class="row"><div class="timer grow" id="tbar"><div></div></div><span class="timer-num" id="tnum"></span></div>
+    <div class="banner" id="tpause" style="display:none;border-color:var(--accent)">⏸ Pause — le maître du jeu a arrêté le chrono</div>`;
 }
 
 setInterval(() => {
@@ -575,15 +576,13 @@ setInterval(() => {
   bar.firstElementChild.style.width = (100 * rem / v.duration) + '%';
   bar.classList.toggle('warn', rem <= 5 && !v.paused);
   $('#tnum').textContent = v.paused ? '⏸' : Math.ceil(rem);
-  if (v.paused && !(S.local && S.local.qIndex === v.qIndex)) {
-    const ui = app.querySelectorAll('.choice, #send, .order-item, #est, #txt, #pmap, #joker');
-    ui.forEach(el => { el.disabled = true; el.style.opacity = .5; });
-    return;
-  }
-  if (rem <= 0 && !(S.local && S.local.qIndex === v.qIndex)) {
-    const ui = app.querySelectorAll('.choice, #send, .order-item, #est, #txt, #pmap, #joker');
-    ui.forEach(el => { el.disabled = true; el.style.pointerEvents = 'none'; el.style.opacity = .5; });
-  }
+  // Gelé pendant une pause ou après le chrono — et dégelé dès que ça repart.
+  // On passe par une classe : chaque bouton garde son propre état (le bouton
+  // « Valider » d'un classement reste désactivé tant que l'ordre n'est pas fait).
+  const dejaRepondu = S.local && S.local.qIndex === v.qIndex;
+  app.classList.toggle('gele', !dejaRepondu && (!!v.paused || rem <= 0));
+  const pz = $('#tpause');
+  if (pz) pz.style.display = v.paused ? '' : 'none';
 }, 250);
 
 /* ---------------- Démarrage ---------------- */

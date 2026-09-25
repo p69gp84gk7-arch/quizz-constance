@@ -836,13 +836,23 @@ function pause(st) {
   return true;
 }
 
-/** Repart où on s'était arrêté, en décalant le départ du chrono. */
+/**
+ * Repart où on s'était arrêté. Le temps mort s'ajoute au chrono, et l'extrait
+ * reprend là où il s'était tu : on renvoie l'ordre de lecture avec le nombre de
+ * secondes déjà écoutées (`offset`), sinon le son ne redémarrerait jamais.
+ */
 function resume(st) {
   const q = st.current;
   if (!q || !q.pausedAt) return false;
   q.pausedMs = (Number(q.pausedMs) || 0) + (Date.now() - q.pausedAt);
   q.pausedAt = null;
-  if (q.introEnd) q.introEnd += 0;   // l'intro n'est pas concernée : elle est déjà passée
+  if (isSound(q.media) && st.status === 'QUESTION') {
+    const ecoule = Math.max(0, (Date.now() - q.start - q.pausedMs) / 1000);
+    const dur = Number(q.media.dur) || 15;
+    st.media = ecoule < dur - 1
+      ? { seq: st.media.seq + 1, action: 'play', at: Date.now(), offset: Math.round(ecoule * 10) / 10 }
+      : { seq: st.media.seq + 1, action: 'stop' };   // l'extrait était déjà fini
+  }
   return true;
 }
 
@@ -2027,7 +2037,7 @@ function createActions(db) {
 
 
 /** Version du serveur : renvoyée par l'action « time », pour vérifier ce qui est déployé. */
-const BUILD = '2026-09-25-5b665c';
+const BUILD = '2026-09-25-d1c43f';
 
 const db = createDb(
   Deno.env.get('SUPABASE_URL') ?? '',

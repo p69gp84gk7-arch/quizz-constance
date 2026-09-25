@@ -5,7 +5,7 @@
 /** Version du serveur, renseignée au premier appel : sert à repérer un déploiement oublié. */
 let SERVER_BUILD = '?';
 
-const APP_VERSION = '2026-09-25-e';
+const APP_VERSION = '2026-09-25-f';
 
 const VISUALS = {
   plateau: 'Plateau TV', elegant: 'Élégant', pop: 'Pop', neon: 'Néon', nature: 'Nature', enfants: 'Enfants',
@@ -321,8 +321,15 @@ const MediaSync = {
     if (view.media.seq === this.lastSeq) return;
     this.lastSeq = view.media.seq;
     if (!isPlayerHere) return;
-    if (view.media.action === 'play' && question && question.media) MEDIA_PLAYER.play(question.media, view.media.at);
-    else MEDIA_PLAYER.stop();
+    if (view.media.action === 'play' && question && question.media) {
+      // reprise après une pause : on saute les secondes déjà entendues
+      const saut = Number(view.media.offset) || 0;
+      const m = saut ? Object.assign({}, question.media, {
+        start: (Number(question.media.start) || 0) + saut,
+        dur: Math.max(1, (Number(question.media.dur) || 15) - saut),
+      }) : question.media;
+      MEDIA_PLAYER.play(m, view.media.at);
+    } else MEDIA_PLAYER.stop();
   },
 };
 
