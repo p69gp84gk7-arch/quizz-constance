@@ -233,7 +233,11 @@ console.log('\n3. L\'interface du maître du jeu');
   ok(/Histoire/.test(M.txt()) && /Blind test musique/.test(M.txt()), 'les thèmes de la banque sont proposés');
   ok(/1521|1 521/.test(M.txt().replace(/\u202f|\u00a0/g, ' ')) || /questions/.test(M.txt()), 'le nombre de questions disponibles est affiché');
 
-  // Création d'une partie depuis l'interface
+  // Création d'une partie depuis l'interface.
+  // Types imposés : ce test vérifie l'interface, pas le hasard du tirage
+  // (une question de carte ou d'estimation s'affiche autrement).
+  M.win.eval("A.draft.chapters[0].types = ['QCM']; A.draft.chapters[0].themes = []; saveDraft(); renderPreparer();");
+  await wait(40);
   M.$('#create').click();
   await wait(500);
   const code = M.win.eval('A.code');
