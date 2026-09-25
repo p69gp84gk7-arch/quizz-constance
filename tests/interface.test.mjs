@@ -119,6 +119,10 @@ async function loadPage(file, url) {
       return { json: async () => ({ ok: false, error: e.message }) };
     }
   };
+  // jsdom ne sait pas jouer de son : on remplace par des fonctions vides
+  win.HTMLMediaElement.prototype.play = function () { return Promise.resolve(); };
+  win.HTMLMediaElement.prototype.pause = function () {};
+  win.HTMLMediaElement.prototype.load = function () {};
   win.confirm = () => true;
   win.alert = () => {};
   win.prompt = () => 'Montage de test';
