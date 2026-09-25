@@ -3,13 +3,51 @@
 const ALL_TYPES = ['QCM', 'VF', 'ESTIMATION', 'ORDRE', 'CARTE'];
 
 function defaultChapter(name, nb, level, extra) {
-  return Object.assign({ name: name, themes: [], cats: [], eras: [], types: ALL_TYPES.slice(), media: 'tous', nb: nb, level: level }, extra || {});
+  const c = Object.assign({ name: name, themes: [], cats: [], eras: [], types: ALL_TYPES.slice(),
+    media: 'tous', nb: nb, level: level, autoName: true }, extra || {});
+  c.name = chapterAutoName(c) || name;
+  return c;
+}
+
+/**
+ * Nom du chapitre déduit de ce qui a été coché : le maître du jeu n'a plus à
+ * inventer un titre. Dès qu'il en écrit un lui-même, on n'y touche plus.
+ */
+function chapterAutoName(c) {
+  const bouts = [];
+  if (c.themes.length === 1) bouts.push(c.themes[0]);
+  else if (c.themes.length === 2) bouts.push(c.themes.join(' & '));
+  else if (c.themes.length > 2) bouts.push('Mélange de ' + c.themes.length + ' thèmes');
+
+  if (c.cats.length === 1) bouts.push(c.cats[0]);
+  else if (c.cats.length > 1 && c.cats.length <= 3) bouts.push(c.cats.join(', '));
+  else if (c.cats.length > 3) bouts.push(c.cats.length + ' catégories');
+
+  if (c.eras.length === 1) bouts.push(c.eras[0]);
+  else if (c.eras.length > 1) bouts.push(c.eras.length + ' époques');
+
+  if (c.dates) bouts.push('📅 Dates');
+  if (c.media === 'photo') bouts.push('📸 Photos');
+  else if (c.media === 'son') bouts.push('🎧 Extraits');
+  else if (c.media === 'sans') bouts.push('sans média');
+
+  const t = c.types || [];
+  if (t.length === 1) bouts.push(typeLabel(t[0]));
+  else if (t.length && t.length < ALL_TYPES.length) bouts.push(t.map(typeLabel).join(' / '));
+
+  return bouts.length ? bouts.join(' · ').slice(0, 60) : 'Culture générale';
+}
+
+/** Recalcule les noms automatiques de tous les chapitres. */
+function refreshChapterNames(d) {
+  d.chapters.forEach(c => { if (c.autoName !== false) c.name = chapterAutoName(c); });
 }
 
 function defaultDraft() {
   return {
-    title: 'Le Quizz de Constance', duration: 30, maxPlayers: 15, points: 'rapidite', estimation: 'marge', margePct: 10,
-    chrono: 'auto', autoReveal: true, visual: 'plateau', sounds: true, audioOn: 'ecran', choix: 'adaptatifs', estimQcm: 'mixte',
+    title: 'Quizz', duration: 30, maxPlayers: 15, points: 'rapidite', estimation: 'marge', margePct: 10,
+    chrono: 'auto', autoReveal: true, visual: 'plateau', sounds: true, audioOn: 'ecran', choix: 'adaptatifs',
+    estimQcm: 'auto', saisie: 'auto', saisieNiveau: 4,
     format: 'classique', lives: 3, teams: 2, bonus: false, finale: false, joker: true,
     chapters: [defaultChapter('Culture générale', 15, 1)],
   };
@@ -51,7 +89,9 @@ const PRESETS = {
 A.draft = (() => { try { return JSON.parse(store('qc_draft')) || defaultDraft(); } catch (e) { return defaultDraft(); } })();
 A.draft.chrono = 'auto'; // ancien réglage « chrono manuel » supprimé
 A.draft.choix = A.draft.choix || 'adaptatifs';
-A.draft.estimQcm = A.draft.estimQcm || 'mixte';
+A.draft.estimQcm = A.draft.estimQcm || 'auto';
+A.draft.saisie = A.draft.saisie || 'auto';
+A.draft.saisieNiveau = A.draft.saisieNiveau || 4;
 A.draft.chapters.forEach(c => {
   c.eras = c.eras || [];
   if (c.types && c.types.length === 4 && c.types.indexOf('CARTE') < 0) c.types = ALL_TYPES.slice(); // ancien brouillon « tous les types »
@@ -131,7 +171,12 @@ function renderPreparer() {
         <div><label class="lbl">Propositions de réponse</label><select data-k="choix">
           ${opt('adaptatifs', d.choix, 'Tirées au sort selon la difficulté')}${opt('fixes', d.choix, 'Toujours celles du Sheet')}</select></div>
         <div><label class="lbl">Estimations (années, nombres…)</label><select data-k="estimQcm">
-          ${opt('mixte', d.estimQcm, 'Mélange : libre ou QCM')}${opt('qcm', d.estimQcm, 'Toujours en QCM')}${opt('libre', d.estimQcm, 'Toujours en réponse libre')}</select></div>
+          ${opt('auto', d.estimQcm, 'Selon la difficulté : QCM puis valeur exacte')}${opt('mixte', d.estimQcm, 'Mélange : libre ou QCM')}${opt('qcm', d.estimQcm, 'Toujours en QCM')}${opt('libre', d.estimQcm, 'Toujours en réponse libre')}</select></div>
+        <div><label class="lbl">Réponse tapée au clavier</label><select data-k="saisie">
+          ${opt('auto', d.saisie, 'Selon la difficulté (recommandé)')}${opt('jamais', d.saisie, 'Jamais : toujours 4 propositions')}${opt('toujours', d.saisie, 'Toujours taper la réponse')}</select>
+          <div class="muted" style="font-size:12px">En mode automatique, les propositions disparaissent à partir du niveau
+            <select data-k="saisieNiveau" style="width:auto;display:inline-block">${[2, 3, 4, 5].map(n => `<option value="${n}" ${d.saisieNiveau == n ? 'selected' : ''}>${'★'.repeat(n)}</option>`).join('')}</select>
+            : il faut alors écrire la réponse. Les accents et une faute de frappe sont pardonnés.</div></div>
         <div><label class="lbl">Son du blind test</label><select data-k="audioOn">
           ${opt('ecran', d.audioOn, 'Sur l\'écran public')}${opt('admin', d.audioOn, 'Sur mon appareil')}</select></div>
         <div><label class="lbl">Ambiance</label><select data-k="visual">${Object.keys(VISUALS).map(k => opt(k, d.visual, VISUALS[k])).join('')}</select></div>
@@ -162,7 +207,10 @@ function renderPreparer() {
       }[d.format]}</p>
     </div>
 
-    <div class="row"><h2 style="margin:0">📖 Chapitres</h2><span class="muted">La difficulté évolue dans chaque chapitre à partir du niveau de départ, et ne redescend jamais.</span></div>
+    <div class="row"><h2 style="margin:0">📖 Chapitres</h2></div>
+    <p class="muted" style="margin:0 0 6px">Un chapitre = un paquet de questions avec ses propres règles de tirage.
+      <b>Cochez simplement les thèmes qui vous intéressent : le titre du chapitre s'écrit tout seul.</b>
+      La difficulté part du niveau indiqué, monte quand les joueurs répondent juste, et ne redescend jamais.</p>
     ${d.chapters.map((c, i) => chapterCard(c, i)).join('')}
     <div class="row">
       <button class="btn" id="addCh">➕ Ajouter un chapitre</button>
@@ -186,7 +234,11 @@ function chapterCard(c, i) {
   return `<div class="card col chapter" data-ch="${i}">
     <div class="row">
       <b style="font-size:18px">${i + 1}.</b>
-      <input type="text" class="grow" data-ck="name" value="${esc(c.name)}" style="max-width:320px;font-weight:700">
+      <input type="text" class="grow" data-ck="name" value="${esc(c.name)}" style="max-width:320px;font-weight:700"
+        title="${c.autoName === false ? 'Nom choisi par toi' : 'Nom automatique : il suit tes cases cochées'}">
+      ${c.autoName === false
+        ? '<button class="btn small" data-autoname title="Revenir au nom automatique">↺ auto</button>'
+        : '<span class="muted" style="font-size:12px">nom automatique</span>'}
       <label>Questions <input type="number" min="1" max="50" data-ck="nb" value="${c.nb}" style="width:80px"></label>
       <label>Départ <select data-ck="level" style="width:auto">${[1, 2, 3, 4, 5].map(n => `<option value="${n}" ${n == c.level ? 'selected' : ''}>${'★'.repeat(n)}</option>`).join('')}</select></label>
       <span class="spacer"></span>
@@ -220,7 +272,7 @@ function chapterCard(c, i) {
 function bindPreparer() {
   const d = A.draft;
   const root = $('#tab-preparer');
-  const rerender = () => { saveDraft(); renderPreparer(); };
+  const rerender = () => { refreshChapterNames(d); saveDraft(); renderPreparer(); };
 
   root.querySelectorAll('[data-k]').forEach(el => {
     const k = el.dataset.k;
@@ -239,6 +291,7 @@ function bindPreparer() {
       const k = el.dataset.ck;
       el[el.tagName === 'SELECT' ? 'onchange' : 'oninput'] = () => {
         c[k] = el.type === 'number' || k === 'level' ? Number(el.value) : el.value;
+        if (k === 'name') c.autoName = false;   // le maître du jeu a choisi son titre
         saveDraft();
         if (k === 'media' || k === 'nb') rerender();
       };
@@ -247,13 +300,14 @@ function bindPreparer() {
     card.querySelectorAll('[data-theme]').forEach(b => b.onclick = () => {
       toggle(c.themes, b.dataset.theme);
       c.cats = [];
-      if (c.themes.length === 1 && /^(Culture générale|Chapitre \d+|Échauffement|Grand final|Express)$/.test(c.name)) c.name = c.themes[0];
       rerender();
     });
     card.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => { toggle(c.cats, b.dataset.cat); rerender(); });
     card.querySelectorAll('[data-era]').forEach(b => b.onclick = () => { toggle(c.eras, b.dataset.era); rerender(); });
     const dt = card.querySelector('[data-dates]');
     if (dt) dt.onclick = () => { c.dates = !c.dates; rerender(); };
+    const an = card.querySelector('[data-autoname]');
+    if (an) an.onclick = () => { c.autoName = true; rerender(); };
     card.querySelectorAll('[data-type]').forEach(b => b.onclick = () => {
       toggle(c.types, b.dataset.type);
       if (!c.types.length) c.types = ALL_TYPES.slice();
@@ -358,7 +412,7 @@ function randomQuiz() {
 function keepSettings() {
   const d = A.draft;
   const k = {};
-  ['title', 'visual', 'duration', 'maxPlayers', 'points', 'sounds', 'audioOn', 'choix', 'estimQcm', 'format', 'lives', 'teams', 'bonus', 'finale', 'joker', 'estimation', 'margePct', 'autoReveal']
+  ['title', 'visual', 'duration', 'maxPlayers', 'points', 'sounds', 'audioOn', 'choix', 'estimQcm', 'saisie', 'saisieNiveau', 'format', 'lives', 'teams', 'bonus', 'finale', 'joker', 'estimation', 'margePct', 'autoReveal']
     .forEach(x => { k[x] = d[x]; });
   return k;
 }
@@ -441,7 +495,7 @@ function yearsQuiz() {
     chapters = eras.map((e, i) => defaultChapter('⏳ ' + e, ns[i], 1 + Math.floor(i * 3 / eras.length), { eras: [e], themes: y.themes.slice(), dates: y.dates }));
   }
   const short = chapters.filter(c => available(c) < c.nb);
-  A.draft = Object.assign(defaultDraft(), keepSettings(), { title: 'Le Quizz de Constance · ' + label(eras), chapters: chapters });
+  A.draft = Object.assign(defaultDraft(), keepSettings(), { title: 'Quizz · ' + label(eras), chapters: chapters });
   if (short.length) toast('⚠ Pas assez de questions pour : ' + short.map(c => c.name).join(', ') + '. Réduis le nombre de questions ou ajoute des thèmes.', true);
   return true;
 }

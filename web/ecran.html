@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Le Quizz de Constance — écran</title>
+<title>Quizz — écran</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Playfair+Display:wght@600;800&family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=2026-09-24-a">
@@ -132,6 +132,20 @@ function refresh(v) {
   if (key !== S.key) { S.key = key; render(v); playStatusSound(v); }
   const ans = $('#answered');
   if (ans && v.answeredCount !== undefined) ans.textContent = v.answeredCount + ' / ' + (v.format === 'face' && v.duel ? v.playerCount : v.format === 'survie' && v.survivors ? v.survivors.length : v.playerCount);
+  // qui a répondu, et en combien de temps (sans dire QUOI : pas de fuite avant la révélation)
+  const qui = $('#quiarepondu');
+  if (qui) qui.innerHTML = answeredChips(v);
+}
+
+/** Pastilles « pseudo · temps », dans l'ordre d'arrivée des réponses. */
+function answeredChips(v) {
+  const list = (v.answered || []).slice().sort((a, b) => (a.t || 0) - (b.t || 0));
+  if (!list.length) return '<span class="muted">Personne n\'a encore répondu…</span>';
+  return list.map((p, i) => `<span class="pill pop-in">${i === 0 ? '⚡ ' : ''}${esc(p.pseudo)} <b>${fmtSec(p.t)}</b></span>`).join('');
+}
+
+function fmtSec(t) {
+  return t === null || t === undefined ? '' : String(Math.round(Number(t) * 10) / 10).replace('.', ',') + ' s';
 }
 
 function playStatusSound(v) {
@@ -257,7 +271,8 @@ function render(v) {
     case 'QUESTION': {
       const live = v.status === 'QUESTION';
       let body = '';
-      if (q.type === 'ESTIMATION') body = `<div class="center muted" style="font-size:1.4em">✍️ Répondez sur votre téléphone${q.unit ? ' (en ' + esc(q.unit) + ')' : ''}</div>`;
+      if (q.type === 'SAISIE') body = `<div class="center muted" style="font-size:1.4em">⌨️ Tapez la réponse exacte sur votre téléphone${q.lettres ? ' · ' + q.lettres + ' lettres' : ''}${q.initiale ? ' · commence par « ' + esc(q.initiale) + ' »' : ''}</div>`;
+      else if (q.type === 'ESTIMATION') body = `<div class="center muted" style="font-size:1.4em">✍️ Répondez sur votre téléphone${q.unit ? ' (en ' + esc(q.unit) + ')' : ''}</div>`;
       else if (q.type === 'ORDRE') body = `<div class="center muted">${esc(q.hint)}</div><div class="order-list">${q.items.map(it => `<div class="it">${esc(it)}</div>`).join('')}</div>`;
       else if (q.type === 'CARTE') body = `<div id="map" class="qmap"></div>`;
       else body = choicesHtml(q, null);
@@ -268,7 +283,8 @@ function render(v) {
           <div class="q">${esc(q.text)}</div>${body}</div>
         <div class="row">${live ? ringHtml() : '<span class="pill">🎤 Écoutez la question…</span>'}
           ${carte ? '<span class="pill">📍 Placez le point sur votre téléphone</span>' : ''}
-          <span class="spacer"></span>${live ? `<span class="pill" style="font-size:1.2em">📨 <span id="answered">${v.answeredCount || 0} / ${v.playerCount}</span></span>` : ''}</div>`;
+          <span class="spacer"></span>${live ? `<span class="pill" style="font-size:1.2em">📨 <span id="answered">${v.answeredCount || 0} / ${v.playerCount}</span></span>` : ''}</div>
+        ${live ? `<div class="chips" id="quiarepondu">${answeredChips(v)}</div>` : ''}`;
       if (q.type === 'CARTE') showMap(v, null);
       break;
     }

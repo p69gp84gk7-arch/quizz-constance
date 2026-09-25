@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0c1238">
-<title>Le Quizz de Constance</title>
+<title>Quizz</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Playfair+Display:wght@600;800&family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=2026-09-24-a">
@@ -61,7 +61,7 @@ function screenCode(msg) {
   app.innerHTML = `
     <div class="hero fade-in">
       <div class="big">🎯</div>
-      <h1>Le Quizz de Constance</h1>
+      <h1>Quizz</h1>
       ${msg ? `<div class="card">${esc(msg)}</div>` : ''}
       <div class="card col" style="width:100%">
         <label class="lbl">Code de la partie</label>
@@ -198,7 +198,7 @@ function refresh() {
   const v = localPromote(S.view);
   const answered = v.me && (v.me.answered || (S.local && S.local.qIndex === v.qIndex));
   const hide = jokerHide(v);
-  const key = [v.status, v.qIndex, answered ? 1 : 0, v.me && v.me.result ? 'r' : 'w', v.status === 'REVEAL' || v.status === 'SCORES' || v.status === 'END' ? v.version : '', v.chapter ? v.chapter.idx : '',
+  const key = [v.status, v.qIndex, answered ? 1 : 0, S.local && S.local.t !== undefined ? 't' : '', v.me && v.me.result ? 'r' : 'w', v.status === 'REVEAL' || v.status === 'SCORES' || v.status === 'END' ? v.version : '', v.chapter ? v.chapter.idx : '',
     hide ? 'j' : '', v.me && v.me.out ? 'out' : '', v.me && v.me.spectator ? 'sp' : '', v.status === 'LOBBY' && v.me ? v.me.team : ''].join('|');
   if (key !== S.key) { S.key = key; render(v, answered); }
   updateHeader(v);
@@ -278,7 +278,10 @@ function render(v, answered) {
         app.innerHTML = h + progress(v) + timerHtml() + `<div class="card"><div class="qtext">${esc(q.text)}</div></div>
           <div class="hero pop-in"><div class="big">💀</div><h2>Éliminé·e</h2><p class="muted">Regarde l'écran et encourage les survivants !</p></div>`;
       } else if (answered) {
+        const chrono = S.local && S.local.qIndex === v.qIndex && S.local.t !== undefined
+          ? `<div class="pill accent" style="font-size:18px">⏱ ${String(Math.round(S.local.t * 10) / 10).replace('.', ',')} s</div>` : '';
         app.innerHTML = h + progress(v) + timerHtml() + `<div class="hero pop-in"><div class="big">📨</div><h2>Réponse envoyée !</h2>
+          ${chrono}
           <p class="muted">${esc(localAnswerText(v))}</p><p class="muted">Attends la révélation…</p></div>`;
       } else {
         const canJoker = v.joker && v.me && !v.me.jokerUsed && !jokerHide(v) && q.type === 'QCM' && q.choices && q.choices.length === 4 && !v.me.spectator;
@@ -313,6 +316,7 @@ function render(v, answered) {
           <div style="font-size:56px">${r.ok ? '✅' : (r.answered ? (carte && r.pts ? '👍' : '❌') : '⌛')}</div>
           <h1>${title}</h1>
           ${r.pts ? `<div style="font-size:24px;font-weight:800">+${r.pts} pt${r.pts > 1 ? 's' : ''}${v.reveal.mult > 1 ? ' (×' + v.reveal.mult + ')' : ''}</div>` : ''}
+          ${r.t !== null && r.t !== undefined ? `<div>⏱ répondu en ${String(Math.round(r.t * 10) / 10).replace('.', ',')} s</div>` : ''}
           ${v.me && v.me.streak >= 3 ? `<div>🔥 Série de ${v.me.streak}</div>` : ''}
         </div>
         ${notes.map(n => `<div class="banner">${n}</div>`).join('')}
@@ -394,6 +398,13 @@ function answerUi(q, hide) {
       <div class="row"><span class="muted grow" id="mapmsg" style="font-size:14px">Touche la carte pour placer ton point (zoom avec deux doigts)</span>
       <button class="btn primary big" id="send" disabled>Valider</button></div>`;
   }
+  if (q.type === 'SAISIE') {
+    return `<div class="card col">
+      <div class="muted center" style="font-size:14px">✍️ Écris la réponse exacte${q.lettres ? ' · ' + q.lettres + ' lettres' : ''}${q.initiale ? ' · commence par « ' + esc(q.initiale) + ' »' : ''}</div>
+      <input id="txt" class="est-input" type="text" autocomplete="off" autocapitalize="sentences" placeholder="?" style="font-size:24px">
+      <div class="muted center" style="font-size:12px">Les accents et une petite faute de frappe sont pardonnés.</div>
+      <button class="btn primary big" id="send">Valider</button></div>`;
+  }
   if (q.type === 'ESTIMATION') {
     return `<div class="card col"><input id="est" class="est-input" type="text" inputmode="decimal" placeholder="?" autocomplete="off">
       ${q.unit ? `<div class="center muted">${esc(q.unit)}</div>` : ''}
@@ -411,6 +422,15 @@ function answerUi(q, hide) {
 function bindAnswerUi(q, v) {
   if (q.type === 'QCM' || q.type === 'VF') {
     app.querySelectorAll('.choice').forEach(b => b.onclick = () => send(v, Number(b.dataset.i)));
+  } else if (q.type === 'SAISIE') {
+    const go = () => {
+      const t = String($('#txt').value || '').trim();
+      if (t.length < 1) return toast('Écris ta réponse.', true);
+      send(v, t);
+    };
+    $('#send').onclick = go;
+    $('#txt').onkeydown = e => { if (e.key === 'Enter') go(); };
+    $('#txt').focus();
   } else if (q.type === 'ESTIMATION') {
     const go = () => {
       const n = Number(String($('#est').value).replace(/\s/g, '').replace(',', '.'));
@@ -461,6 +481,7 @@ function send(v, a) {
   S.key = ''; refresh();
   rpc('playerAnswer', { code: S.code, pid: S.pid, qIndex: v.qIndex, answer: a }).then(r => {
     if (!r.ok) { toast(r.msg, true); if (r.msg !== 'Réponse déjà enregistrée.') { S.local = null; S.key = ''; } }
+    else if (S.local && S.local.qIndex === v.qIndex) { S.local.t = r.t; S.key = ''; refresh(); }
   }).catch(e => { S.local = null; S.key = ''; toast(e, true); });
 }
 
@@ -468,6 +489,7 @@ function localAnswerText(v) {
   const q = v.question;
   const a = S.local && S.local.qIndex === v.qIndex ? S.local.a : (v.me ? v.me.answer : null);
   if (a === null || a === undefined) return '';
+  if (q.type === 'SAISIE') return 'Ta réponse : ' + a;
   if (q.choices) return 'Tu as répondu : ' + (q.choices[a] || '');
   if (q.type === 'ORDRE') return 'Ton ordre : ' + a.map(i => q.items[i]).join(' → ');
   if (q.type === 'CARTE') return '📍 Ton point est posé.';
@@ -496,7 +518,7 @@ setInterval(() => {
   bar.classList.toggle('warn', rem <= 5);
   $('#tnum').textContent = Math.ceil(rem);
   if (rem <= 0 && !(S.local && S.local.qIndex === v.qIndex)) {
-    const ui = app.querySelectorAll('.choice, #send, .order-item, #est, #pmap, #joker');
+    const ui = app.querySelectorAll('.choice, #send, .order-item, #est, #txt, #pmap, #joker');
     ui.forEach(el => { el.disabled = true; el.style.pointerEvents = 'none'; el.style.opacity = .5; });
   }
 }, 250);

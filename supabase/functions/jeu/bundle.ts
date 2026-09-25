@@ -158,7 +158,7 @@ function createDb(url, serviceKey, opts) {
 
 /* ================= MOTEUR (engine.js) ================= */
 /**
- * Le Quizz de Constance — moteur de jeu (logique pure, sans base de données).
+ * Quizz — moteur de jeu (logique pure, sans base de données).
  *
  * Porté depuis Jeu.gs (Google Apps Script). Aucune fonction d'ici ne lit ni
  * n'écrit : elles reçoivent l'état et les questions, et rendent le nouvel état.
@@ -176,7 +176,7 @@ const LIVE = ['INTRO', 'READ', 'QUESTION'];
 const INTRO_S = 5;      // compte à rebours avant chaque question
 const GRACE_S = 1.5;    // tolérance réseau après la fin du chrono
 const MAP_OK = 0.75;    // « bonne réponse » sur la carte à partir de 75 % de précision
-const APP_NAME = 'Le Quizz de Constance';
+const APP_NAME = 'Quizz';
 
 /* ------------------------------------------------------------------ */
 /* Outils                                                              */
@@ -244,7 +244,10 @@ function normalizeSettings(s) {
     chrono: 'auto', // le chrono démarre toujours seul à la fin du compte à rebours
     autoReveal: s.autoReveal !== false,
     choix: s.choix === 'fixes' ? 'fixes' : 'adaptatifs',
-    estimQcm: ['libre', 'qcm', 'mixte'].indexOf(s.estimQcm) >= 0 ? s.estimQcm : 'mixte',
+    // « auto » : QCM aux niveaux faciles, saisie au clavier quand la difficulté monte
+    estimQcm: ['libre', 'qcm', 'mixte', 'auto'].indexOf(s.estimQcm) >= 0 ? s.estimQcm : 'auto',
+    saisie: ['auto', 'jamais', 'toujours'].indexOf(s.saisie) >= 0 ? s.saisie : 'auto',
+    saisieNiveau: clamp(s.saisieNiveau, 2, 5, 4),   // à partir de quel niveau on tape la réponse
     format: FORMATS.indexOf(s.format) >= 0 ? s.format : 'classique',
     lives: clamp(s.lives, 1, 5, 3),
     teams: clamp(s.teams, 2, 4, 2),
@@ -290,7 +293,8 @@ function buildPools(settings, questions) {
       if (ch.media === 'sans' && m) return;
       if (ch.media === 'photo' && !isImage(m)) return;
       if (ch.media === 'son' && !/youtu/.test(m)) return;
-      pool.push([r.id, Number(r.difficulte) || 1, Number(r.utilisations) || 0]);
+      pool.push([r.id, Number(r.difficulte) || 1, Number(r.utilisations) || 0,
+        r.dernier_jeu ? new Date(r.dernier_jeu).getTime() : 0]);
     });
     return pool;
   });
@@ -323,21 +327,50 @@ function newCode(taken) {
   throw new Error('Impossible de générer un code de partie.');
 }
 
-/** Cherche au niveau visé, puis au-dessus, puis en dessous ; privilégie les questions les moins jouées. */
+/**
+ * Tire la prochaine question. Trois principes, dans cet ordre :
+ *  1. rester proche du niveau visé, mais sans s'y enfermer : si le niveau 5 est
+ *     presque vide (c'est le cas des blind tests), on accepte volontiers 4 ou 3
+ *     plutôt que de resservir éternellement les 4 mêmes questions ;
+ *  2. privilégier les questions peu jouées et pas jouées récemment ;
+ *  3. garder du hasard, pour que deux soirées identiques ne se ressemblent pas.
+ *
+ * `pool` = [id, difficulté, utilisations, joué le (ms)].
+ */
 function pickId(pool, level, used) {
   const free = pool.filter(p => used.indexOf(p[0]) < 0);
-  const order = [level];
-  for (let d = 1; d <= 4; d++) { order.push(level + d); order.push(level - d); }
-  for (let k = 0; k < order.length; k++) {
-    const L = order[k];
-    if (L < 1 || L > 5) continue;
-    const c = free.filter(p => p[1] === L);
-    if (!c.length) continue;
-    const minUse = Math.min.apply(null, c.map(p => p[2]));
-    const best = c.filter(p => p[2] === minUse);
-    return best[Math.floor(Math.random() * best.length)][0];
+  if (!free.length) return null;
+
+  const maintenant = Date.now();
+  const JOUR = 86400000;
+  const usages = free.map(p => Number(p[2]) || 0);
+  const usageMax = Math.max.apply(null, usages.concat([1]));
+
+  const note = p => {
+    const ecart = Math.abs((Number(p[1]) || 1) - level);
+    // le niveau pèse lourd, sans être une barrière : s'éloigner de deux crans
+    // reste possible, s'éloigner de quatre devient rare
+    let n = Math.pow(0.42, ecart);
+    // question peu jouée = plus de chances
+    n *= 1 - 0.55 * ((Number(p[2]) || 0) / usageMax);
+    // jouée dans les 15 derniers jours : nettement moins de chances
+    const vu = Number(p[3]) || 0;
+    if (vu) {
+      const jours = (maintenant - vu) / JOUR;
+      if (jours < 15) n *= 0.15 + 0.85 * (jours / 15);
+    }
+    return Math.max(n, 0.001);
+  };
+
+  // tirage au sort pondéré : le meilleur candidat est favori, sans être garanti
+  const poids = free.map(note);
+  const total = poids.reduce((a, b) => a + b, 0);
+  let tirage = Math.random() * total;
+  for (let i = 0; i < free.length; i++) {
+    tirage -= poids[i];
+    if (tirage <= 0) return free[i][0];
   }
-  return null;
+  return free[free.length - 1][0];
 }
 
 /* ------------------------------------------------------------------ */
@@ -363,6 +396,98 @@ function parseMedia(url, start, dur) {
 
 const SOUND_KINDS = ['youtube', 'audio'];
 const isSound = m => !!m && SOUND_KINDS.indexOf(m.kind) >= 0;
+
+/* ------------------------------------------------------------------ */
+/* Réponses tapées au clavier                                          */
+/* ------------------------------------------------------------------ */
+
+/** « L'Étoile   noire ! » → « etoile noire » : on compare le fond, pas la forme. */
+function normText(x) {
+  return String(x == null ? '' : x)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')      // accents
+    .toLowerCase()
+    .replace(/[''`]/g, "'")
+    .replace(/\bl'/g, ' ')                                  // l'Étoile → etoile
+    .replace(/^(le|la|les|un|une|des|du|de|d)\s+/g, '')
+    .replace(/[^a-z0-9àâçéèêëîïôûùüÿñ ]+/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Distance de Levenshtein : combien de lettres séparent deux mots. */
+function distance(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m || !n) return m + n;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+/**
+ * Les écritures acceptées pour une réponse tapée. « Queen – Bohemian Rhapsody »
+ * accepte la réponse entière, mais aussi « Bohemian Rhapsody » seul : on demande
+ * le titre, pas une dictée.
+ */
+function acceptedForms(rep, question) {
+  const brut = String(rep || '');
+  const formes = [brut];
+  const parts = brut.split(/\s[–—-]\s|\s\/\s/).map(x => x.trim()).filter(x => x.length >= 3);
+  const q = String(question || '');
+  if (parts.length === 2) {
+    // « Queen – Bohemian Rhapsody » : on demande le titre ou l'artiste, pas les deux
+    // l'ordre compte : « Qui chante ce titre ? » parle d'artiste, pas de titre
+    if (/\bqui\b|artiste|groupe|chante|interpr|composit/i.test(q)) formes.push(parts[0]);
+    else if (/titre|chanson|morceau|film|album/i.test(q)) formes.push(parts[1]);
+    else formes.push(parts[0], parts[1]);
+  } else {
+    parts.forEach(x => formes.push(x));
+  }
+  const sansParen = brut.replace(/\([^)]*\)/g, '').trim();
+  if (sansParen && sansParen !== brut) formes.push(sansParen);
+  const out = [];
+  formes.map(normText).forEach(f => { if (f && out.indexOf(f) < 0) out.push(f); });
+  return out;
+}
+
+/**
+ * Ce qu'on attend vraiment que le joueur tape : pour « Queen – Bohemian Rhapsody »
+ * à la question « Quel est ce titre ? », c'est « Bohemian Rhapsody ».
+ * Sert à donner les indices (nombre de lettres, initiale) sans induire en erreur.
+ */
+function answerTarget(rep, question) {
+  const brut = String(rep || '').trim();
+  const parts = brut.split(/\s[–—-]\s|\s\/\s/).map(x => x.trim()).filter(x => x.length >= 3);
+  if (parts.length !== 2) return brut;
+  const q = String(question || '');
+  if (/\bqui\b|artiste|groupe|chante|interpr|composit/i.test(q)) return parts[0];
+  if (/titre|chanson|morceau|film|album/i.test(q)) return parts[1];
+  return brut;
+}
+
+/** La réponse tapée est-elle acceptée ? Une faute de frappe est pardonnée sur les mots longs. */
+function matchText(donnee, formes) {
+  const d = normText(donnee);
+  if (!d) return false;
+  for (const f of formes) {
+    if (d === f) return true;
+    const tol = f.length >= 12 ? 2 : f.length >= 6 ? 1 : 0;
+    if (tol && distance(d, f) <= tol) return true;
+  }
+  return false;
+}
+
+/** Une réponse est-elle raisonnablement « tapable » ? (ni liste, ni phrase entière) */
+function typable(rep) {
+  const r = String(rep || '').trim();
+  return r.length >= 2 && r.length <= 42 && r.split(/\s+/).length <= 6 && !/[|;]/.test(r);
+}
 
 /* ------------------------------------------------------------------ */
 /* Carte                                                               */
@@ -485,7 +610,9 @@ function loadQuestion(r, st, families) {
       ? null : Number(String(r.choix3).replace(',', '.'));
     q.answerText = formatNum(q.secret.value, q.unit) + (q.unit ? ' ' + q.unit : '');
     const mode = st ? st.settings.estimQcm : 'libre';
-    if (!isNaN(q.secret.value) && (mode === 'qcm' || (mode === 'mixte' && Math.random() < 0.5))) {
+    // « auto » : on propose 4 nombres tant que c'est facile, puis on demande la valeur exacte
+    const enQcm = mode === 'qcm' || (mode === 'mixte' && Math.random() < 0.5) || (mode === 'auto' && level <= 2);
+    if (!isNaN(q.secret.value) && enQcm) {
       const nums = numericChoices(q.secret.value, level, q.unit);
       q.type = 'QCM';
       q.fromEstimation = true;
@@ -514,13 +641,25 @@ function loadQuestion(r, st, families) {
     q.answerText = items.join(' → ');
   } else {
     q.type = 'QCM';
-    const fixed = [r.choix2, r.choix3, r.choix4].map(x => String(x == null ? '' : x).trim()).filter(x => x && x !== rep);
-    let wrong = fixed;
-    const fam = st && st.settings.choix === 'adaptatifs' && families ? families[q.theme + '|' + q.text] : null;
-    if (fam) wrong = adaptiveDistractors(rep, fixed, fam, q.cat, q.epoque, level);
-    q.choices = shuffle([rep].concat(wrong.slice(0, 3)));
-    q.secret.correct = q.choices.indexOf(rep);
     q.answerText = rep;
+    // Difficulté par la forme de la réponse : QCM en facile, clavier en difficile
+    const regle = st ? st.settings.saisie : 'jamais';
+    const seuil = st ? st.settings.saisieNiveau : 4;
+    const auClavier = typable(rep) && (regle === 'toujours' || (regle === 'auto' && level >= seuil));
+    if (auClavier) {
+      q.type = 'SAISIE';
+      q.secret.formes = acceptedForms(rep, q.text);
+      const cible = answerTarget(rep, q.text);
+      q.lettres = cible.replace(/[^A-Za-zÀ-ÿ0-9]/g, '').length;
+      q.initiale = cible.charAt(0).toUpperCase();
+    } else {
+      const fixed = [r.choix2, r.choix3, r.choix4].map(x => String(x == null ? '' : x).trim()).filter(x => x && x !== rep);
+      let wrong = fixed;
+      const fam = st && st.settings.choix === 'adaptatifs' && families ? families[q.theme + '|' + q.text] : null;
+      if (fam) wrong = adaptiveDistractors(rep, fixed, fam, q.cat, q.epoque, level);
+      q.choices = shuffle([rep].concat(wrong.slice(0, 3)));
+      q.secret.correct = q.choices.indexOf(rep);
+    }
   }
   return q;
 }
@@ -664,6 +803,9 @@ function doReveal(st, players, answers) {
         const d = Math.abs(Number(a) - q.secret.value);
         ok = !isNaN(d) && (s.estimation === 'proche' ? d === minDist && plays(p) : d <= tol);
         txt = formatNum(Number(a));
+      } else if (q.type === 'SAISIE') {
+        ok = matchText(a, q.secret.formes);
+        txt = String(a || '').trim();
       } else if (q.type === 'ORDRE') {
         const seq = (a || []).map(i => q.items[i]);
         ok = seq.join('|') === q.secret.order.join('|');
@@ -785,6 +927,7 @@ function liveJudge(st, answers) {
   const q = st.current;
   if (!q) return () => null;
   if (q.type === 'QCM' || q.type === 'VF') return a => Number(a) === q.secret.correct;
+  if (q.type === 'SAISIE') return a => matchText(a, q.secret.formes);
   if (q.type === 'ORDRE') return a => (a || []).map(i => q.items[i]).join('|') === q.secret.order.join('|');
   if (q.type === 'CARTE') return a => mapScore(q, a).f >= MAP_OK;
   const s = st.settings;
@@ -833,6 +976,7 @@ function publicQuestion(q) {
   return {
     id: q.id, type: q.type, text: q.text, theme: q.theme, cat: q.cat, diff: q.diff,
     choices: q.choices || null, unit: q.unit || '', items: q.items || null, hint: q.hint || '',
+    lettres: q.lettres || null, initiale: q.initiale || '',
     media: q.media, start: q.start || null, epoque: q.epoque || '', zone: q.zone || null,
     mult: q.mult || 1, gold: !!q.gold,
   };
@@ -871,7 +1015,15 @@ function publicView(st, players, answers, pid) {
     // la question part pendant l'intro (sans la réponse) pour s'afficher pile à la fin du compte à rebours
     v.intro = { end: st.current.introEnd, next: 'QUESTION' };
   }
-  if (st.status === 'QUESTION' || st.status === 'INTRO') v.answeredCount = Object.keys(answers || {}).length;
+  if (st.status === 'QUESTION' || st.status === 'INTRO') {
+    v.answeredCount = Object.keys(answers || {}).length;
+    // qui a répondu et en combien de temps : de quoi animer l'écran public,
+    // sans jamais dire ce qui a été répondu
+    v.answered = Object.keys(answers || {})
+      .filter(p => players[p])
+      .map(p => ({ pseudo: players[p].pseudo, t: answers[p].t }))
+      .sort((a, b) => (a.t || 0) - (b.t || 0));
+  }
   if (st.reveal && (st.status === 'REVEAL' || st.status === 'SCORES')) {
     const r = st.reveal;
     v.reveal = {
@@ -934,6 +1086,7 @@ function adminView(st, players, answers) {
         if (dist && dist[Number(a.a)] !== undefined) dist[Number(a.a)]++;
       } else if (st.current.type === 'ORDRE') answerText = (a.a || []).map(i => st.current.items[i]).join(' → ');
       else if (st.current.type === 'CARTE') answerText = 'à ' + formatKm(mapScore(st.current, a.a).km);
+      else if (st.current.type === 'SAISIE') answerText = String(a.a || '').trim();
       else answerText = formatNum(Number(a.a));
     }
     const res = v.reveal && v.reveal.results ? v.reveal.results[p.pid] : null;
@@ -983,7 +1136,7 @@ function answerTime(st, now) {
 
 /* ================= ACTIONS (actions.js) ================= */
 /**
- * Le Quizz de Constance — les actions du serveur.
+ * Quizz — les actions du serveur.
  *
  * Ce module ne connaît que deux choses : le moteur (engine.js) et un objet `db`
  * qui parle à Supabase. `db` est fourni de l'extérieur, ce qui permet de rejouer
@@ -1009,7 +1162,7 @@ function createActions(db) {
 
   // Pour composer une partie, seules ces colonnes servent : inutile de transporter
   // les explications, indices et anecdotes des 1 521 questions.
-  const COLS_LEGERES = 'id,theme,categorie,difficulte,type,question,media_url,epoque,actif,utilisations,est_annee';
+  const COLS_LEGERES = 'id,theme,categorie,difficulte,type,question,media_url,epoque,actif,utilisations,est_annee,dernier_jeu';
 
   /** Toutes les questions (au-delà de la limite de 1 000 lignes par requête). */
   async function allQuestions(cols) {
@@ -1155,7 +1308,9 @@ function createActions(db) {
       }
     }
     const { data: cur } = check(await db.from('questions').select('*').eq('id', q.id).maybeSingle());
-    check(await db.from('questions').update({ utilisations: (cur?.utilisations || 0) + 1 }).eq('id', q.id));
+    check(await db.from('questions').update({
+      utilisations: (cur?.utilisations || 0) + 1, dernier_jeu: nowISO(),
+    }).eq('id', q.id));
   }
 
   async function reveal(st, players) {
@@ -1365,7 +1520,7 @@ function createActions(db) {
       case 'adminUpdateSettings': {
         const st = await loadGame(p.code);
         const players = await loadPlayers(st.code);
-        ['visual', 'sounds', 'audioOn', 'autoReveal', 'duration', 'choix', 'estimQcm'].forEach(k => {
+        ['visual', 'sounds', 'audioOn', 'autoReveal', 'duration', 'choix', 'estimQcm', 'saisie', 'saisieNiveau'].forEach(k => {
           if (p.patch && p.patch[k] !== undefined) st.settings[k] = p.patch[k];
         });
         st.settings = normalizeSettings(st.settings);
@@ -1559,7 +1714,7 @@ function createActions(db) {
 
 /* ================= ENTRÉE (index.ts) ================= */
 /**
- * Le Quizz de Constance — point d'entrée de la fonction serveur (Supabase Edge Function).
+ * Quizz — point d'entrée de la fonction serveur (Supabase Edge Function).
  *
  * Ce fichier ne fait que trois choses : ouvrir la connexion à la base avec la clé
  * secrète, vérifier que les actions « admin… » viennent bien du maître du jeu
@@ -1574,7 +1729,7 @@ function createActions(db) {
 
 
 /** Version du serveur : renvoyée par l'action « time », pour vérifier ce qui est déployé. */
-const BUILD = '2026-09-24-9ca57b';
+const BUILD = '2026-09-25-3be86a';
 
 const db = createDb(
   Deno.env.get('SUPABASE_URL') ?? '',

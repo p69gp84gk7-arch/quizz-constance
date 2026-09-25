@@ -1,5 +1,5 @@
 /**
- * Le Quizz de Constance — les actions du serveur.
+ * Quizz — les actions du serveur.
  *
  * Ce module ne connaît que deux choses : le moteur (engine.js) et un objet `db`
  * qui parle à Supabase. `db` est fourni de l'extérieur, ce qui permet de rejouer
@@ -27,7 +27,7 @@ export function createActions(db) {
 
   // Pour composer une partie, seules ces colonnes servent : inutile de transporter
   // les explications, indices et anecdotes des 1 521 questions.
-  const COLS_LEGERES = 'id,theme,categorie,difficulte,type,question,media_url,epoque,actif,utilisations,est_annee';
+  const COLS_LEGERES = 'id,theme,categorie,difficulte,type,question,media_url,epoque,actif,utilisations,est_annee,dernier_jeu';
 
   /** Toutes les questions (au-delà de la limite de 1 000 lignes par requête). */
   async function allQuestions(cols) {
@@ -173,7 +173,9 @@ export function createActions(db) {
       }
     }
     const { data: cur } = check(await db.from('questions').select('*').eq('id', q.id).maybeSingle());
-    check(await db.from('questions').update({ utilisations: (cur?.utilisations || 0) + 1 }).eq('id', q.id));
+    check(await db.from('questions').update({
+      utilisations: (cur?.utilisations || 0) + 1, dernier_jeu: nowISO(),
+    }).eq('id', q.id));
   }
 
   async function reveal(st, players) {
@@ -383,7 +385,7 @@ export function createActions(db) {
       case 'adminUpdateSettings': {
         const st = await loadGame(p.code);
         const players = await loadPlayers(st.code);
-        ['visual', 'sounds', 'audioOn', 'autoReveal', 'duration', 'choix', 'estimQcm'].forEach(k => {
+        ['visual', 'sounds', 'audioOn', 'autoReveal', 'duration', 'choix', 'estimQcm', 'saisie', 'saisieNiveau'].forEach(k => {
           if (p.patch && p.patch[k] !== undefined) st.settings[k] = p.patch[k];
         });
         st.settings = E.normalizeSettings(st.settings);

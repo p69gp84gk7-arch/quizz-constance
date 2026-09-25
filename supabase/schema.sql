@@ -138,8 +138,14 @@ begin
   select count(*) into n from answers
    where game_code = new.game_code and q_index = new.q_index;
   update game_live
-     set state = jsonb_set(state, '{answeredCount}', to_jsonb(n)),
-         seq = seq + 1, updated_at = now()
+     set state = jsonb_set(
+                   jsonb_set(state, '{answeredCount}', to_jsonb(n)),
+                   '{answered}',
+                   coalesce(state -> 'answered', '[]'::jsonb)
+                     || jsonb_build_object('pseudo', new.pseudo, 't', new.temps)
+                 ),
+         seq = seq + 1,
+         updated_at = now()
    where code = new.game_code
      and status in ('QUESTION', 'INTRO')          -- pas pendant la correction
      and coalesce((state->>'qIndex')::int, -1) = new.q_index;

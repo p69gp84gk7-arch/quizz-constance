@@ -88,7 +88,8 @@ console.log('\n1. Partie classique, 1 chapitre de 15 questions, 4 joueurs');
     const answers = {};
     Object.keys(players).forEach((p, i) => {
       let a;
-      if (q.type === 'ORDRE') a = n < 3 ? q.secret.order.map(x => q.items.indexOf(x)) : q.items.map((_, k) => k);
+      if (q.type === 'SAISIE') a = n < 3 ? q.answerText : 'réponse volontairement fausse';
+      else if (q.type === 'ORDRE') a = n < 3 ? q.secret.order.map(x => q.items.indexOf(x)) : q.items.map((_, k) => k);
       else if (q.type === 'ESTIMATION') a = n < 3 ? q.secret.value : Math.abs(q.secret.value) * 10 + 12345;
       else if (q.type === 'CARTE') a = n < 3 ? [q.secret.lat, q.secret.lon] : [-q.secret.lat, q.secret.lon > 0 ? q.secret.lon - 180 : q.secret.lon + 180];
       else a = n < 3 ? q.secret.correct : (q.secret.correct + 1) % q.choices.length; // toujours faux
@@ -279,6 +280,44 @@ console.log('\n8. Contrôles d\'entrée');
   ok(E.answerTime(st, 1000000 + 4300) === 4.3, 'temps de réponse arrondi au dixième');
   ok(E.answerTime(st, 1000000 + 31000) === 30, 'tolérance réseau de 1,5 s après le chrono');
   ok(E.answerTime(st, 1000000 + 32000) === null, 'réponse trop tardive refusée');
+}
+
+/* ================= 8 bis. La difficulté change la forme de la réponse ================= */
+console.log('\n8 bis. QCM en facile, clavier en difficile');
+{
+  const q = { id: 'X', theme: 'Musique', categorie: '', difficulte: 3, type: 'QCM',
+    question: '🎵 Quel est ce titre ?', reponse: 'Queen – Bohemian Rhapsody', choix2: 'A', choix3: 'B', choix4: 'C' };
+  const st = n => ({ level: n, settings: E.normalizeSettings({ saisie: 'auto', saisieNiveau: 4, choix: 'fixes' }) });
+
+  const facile = E.loadQuestion(q, st(2), {});
+  ok(facile.type === 'QCM' && facile.choices.length === 4, 'niveau 2 : 4 propositions');
+  const dur = E.loadQuestion(q, st(4), {});
+  ok(dur.type === 'SAISIE' && !dur.choices, 'niveau 4 : il faut taper la réponse');
+  // les indices portent sur ce qu'on attend vraiment : le titre, pas « artiste + titre »
+  ok(dur.lettres === 16 && dur.initiale === 'B', 'indices justes : ' + dur.lettres + ' lettres, commence par ' + dur.initiale);
+  const qui = E.loadQuestion(Object.assign({}, q, { question: 'Qui chante ce titre ?' }), st(4), {});
+  ok(qui.initiale === 'Q' && qui.lettres === 5, 'sur « qui chante ? », l\'indice porte sur l\'artiste');
+
+  const jamais = E.loadQuestion(q, { level: 5, settings: E.normalizeSettings({ saisie: 'jamais' }) }, {});
+  ok(jamais.type === 'QCM', 'le maître du jeu peut désactiver la saisie');
+
+  // correction de la saisie
+  const players = { p1: { pseudo: 'A', score: 0 }, p2: { pseudo: 'B', score: 0 }, p3: { pseudo: 'C', score: 0 } };
+  const jeu = { code: 'XX', status: 'QUESTION', qIndex: 0, level: 4, total: 1, used: [], media: { seq: 0, action: 'stop' },
+    settings: E.normalizeSettings({ saisie: 'toujours', points: 'simple' }), current: dur };
+  const res = E.doReveal(jeu, players, {
+    p1: { a: 'Bohemian Rhapsody', t: 5 },
+    p2: { a: 'bohemian rapsody', t: 6 },     // faute de frappe
+    p3: { a: 'Wonderwall', t: 7 },
+  });
+  ok(res.p1.ok, 'réponse exacte acceptée');
+  ok(res.p2.ok, 'faute de frappe pardonnée');
+  ok(!res.p3.ok, 'mauvaise réponse refusée');
+
+  // une réponse trop longue reste en QCM : on ne demande pas de réciter une phrase
+  const longue = E.loadQuestion({ id: 'Y', theme: 'T', difficulte: 5, type: 'QCM', question: 'Que dit-il ?',
+    reponse: 'Un jour je serai le meilleur dresseur de toute la région de Kanto', choix2: 'a', choix3: 'b', choix4: 'c' }, st(5), {});
+  ok(longue.type === 'QCM', 'une réponse à rallonge reste en QCM');
 }
 
 /* ================= 9. Pools : filtres de préparation ================= */

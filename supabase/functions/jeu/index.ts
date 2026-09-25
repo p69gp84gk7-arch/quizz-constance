@@ -1,5 +1,5 @@
 /**
- * Le Quizz de Constance — point d'entrée de la fonction serveur (Supabase Edge Function).
+ * Quizz — point d'entrée de la fonction serveur (Supabase Edge Function).
  *
  * Ce fichier ne fait que trois choses : ouvrir la connexion à la base avec la clé
  * secrète, vérifier que les actions « admin… » viennent bien du maître du jeu
