@@ -121,6 +121,8 @@ console.log('\n1. Partie complète : création, arrivée des joueurs, questions,
   ok(partie && partie.nb_joueurs === 3 && partie.nb_questions === 4, 'la partie est archivée');
   ok(partie.vainqueur === 'Constance', 'le vainqueur est celui qui a tout juste : ' + partie.vainqueur);
 
+  ok(db.rows('_rpc').some(r => r.nom === 'recalculer_difficulte'), 'la difficulté est réévaluée en fin de partie');
+
   const lb = await handle('adminLeaderboard', {});
   ok(lb.classement.length === 3, 'le classement général compte les 3 joueurs');
   const c = lb.classement.find(x => x.pseudo === 'Constance');

@@ -70,7 +70,7 @@ export function createDb(url, serviceKey, opts) {
     let rangeHdr = null;
 
     const url = () => {
-      const parts = filters.map(([c, v]) => enc(c) + '=eq.' + enc(v)).concat(q);
+      const parts = filters.map(([c, v, op]) => enc(c) + '=' + (op || 'eq') + '.' + enc(v)).concat(q);
       return table + (parts.length ? '?' + parts.join('&') : '');
     };
 
@@ -97,6 +97,8 @@ export function createDb(url, serviceKey, opts) {
 
     const api = {
       eq(col, val) { filters.push([col, String(val)]); return api; },
+      /** Motif SQL : « Blind test% » = commence par. */
+      like(col, motif) { filters.push([col, String(motif), 'like']); return api; },
       order(col, o) { q.push('order=' + enc(col) + '.' + (!o || o.ascending !== false ? 'asc' : 'desc')); return api; },
       limit(n) { q.push('limit=' + Number(n)); return api; },
       range(a, b) { rangeHdr = a + '-' + b; return api; },
@@ -123,6 +125,15 @@ export function createDb(url, serviceKey, opts) {
         upsert: (p, o) => builder(table, 'upsert', p, o),
         delete: () => builder(table, 'delete'),
       };
+    },
+
+    /** Appelle une fonction SQL (ex. recalculer_difficulte). */
+    async rpc(nom, params) {
+      const r = await send('rpc/' + encodeURIComponent(nom), {
+        method: 'POST',
+        body: JSON.stringify(params || {}),
+      });
+      return r;
     },
 
     /** Vérifie le jeton du maître du jeu auprès de Supabase Auth. */

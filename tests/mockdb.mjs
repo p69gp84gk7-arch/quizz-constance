@@ -86,7 +86,13 @@ export function makeDb() {
     const filters = [];
     const state = { order: null, limit: null, range: null, single: false, cols: null };
 
-    const match = r => filters.every(([c, v]) => String(r[c]) === String(v));
+    const match = r => filters.every(([c, v, op]) => {
+      if (op === 'like') {
+        const re = new RegExp('^' + String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*') + '$', 'i');
+        return re.test(String(r[c] ?? ''));
+      }
+      return String(r[c]) === String(v);
+    });
 
     function run() {
       let data = view(table) || rows(table);
@@ -143,6 +149,7 @@ export function makeDb() {
 
     const api = {
       eq(col, val) { filters.push([col, val]); return api; },
+      like(col, motif) { filters.push([col, motif, 'like']); return api; },
       order(col, o) { state.order = { col: col, asc: !o || o.ascending !== false }; return api; },
       limit(n) { state.limit = n; return api; },
       range(a, b) { state.range = [a, b]; return api; },
@@ -167,6 +174,8 @@ export function makeDb() {
         delete: () => builder(table, 'delete'),
       };
     },
+    /** Fonctions SQL : on enregistre l'appel pour que les tests puissent le vérifier. */
+    rpc(nom) { rows('_rpc').push({ nom: nom }); return Promise.resolve({ data: null, error: null }); },
     seed(table, list) { T[table] = list.map(r => Object.assign({ id: r.id ?? seq++ }, r)); },
     rows,
   };

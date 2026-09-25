@@ -67,6 +67,9 @@ export function normalizeSettings(s) {
       dates: !!c.dates,
       nb: clamp(c.nb, 1, 50, 15),
       level: clamp(c.level, 1, 5, 1),
+      // Sélection à la main : uniquement ces questions (ids), ou tout sauf celles-là (exclus)
+      ids: (c.ids || []).map(String),
+      exclus: (c.exclus || []).map(String),
     };
   });
   if (!chapters.length) {
@@ -118,12 +121,30 @@ export function isImage(url) {
   return !!url && !/youtu/.test(url);
 }
 
-/** Pool d'un chapitre : [id, difficulté, utilisations] pour chaque question retenue. */
+/** Difficulté réellement utilisée : celle mesurée sur les parties si elle existe, sinon la note d'origine. */
+export function effDiff(r) {
+  const m = Number(r.difficulte_mesuree);
+  return m >= 1 && m <= 5 ? m : (Number(r.difficulte) || 1);
+}
+
+/** Les blind tests dépendent de la culture de chacun : leur note n'est pas fiable. */
+export function isBlind(r) {
+  return /^blind test/i.test(String(r.theme || ''));
+}
+
+/** Pool d'un chapitre : [id, difficulté, utilisations, dernier passage, souple] pour chaque question retenue. */
 export function buildPools(settings, questions) {
   return settings.chapters.map(ch => {
     const pool = [];
+    const choisies = ch.ids && ch.ids.length ? ch.ids : null;
+    const ecartees = ch.exclus && ch.exclus.length ? ch.exclus : null;
     questions.forEach(r => {
       if (String(r.actif || 'oui').toLowerCase() === 'non' || !r.question) return;
+      // Liste choisie à la main par le maître du jeu : elle a le dernier mot
+      if (choisies) { if (choisies.indexOf(String(r.id)) < 0) return; }
+      else if (ecartees && ecartees.indexOf(String(r.id)) >= 0) return;
+      if (choisies) { pool.push([r.id, effDiff(r), Number(r.utilisations) || 0,
+        r.dernier_jeu ? new Date(r.dernier_jeu).getTime() : 0, isBlind(r) ? 1 : 0]); return; }
       if (ch.themes.length && ch.themes.indexOf(String(r.theme)) < 0) return;
       if (ch.cats.length && ch.cats.indexOf(String(r.categorie)) < 0) return;
       if (ch.eras.length && ch.eras.indexOf(String(r.epoque || '')) < 0) return;
@@ -134,8 +155,9 @@ export function buildPools(settings, questions) {
       if (ch.media === 'sans' && m) return;
       if (ch.media === 'photo' && !isImage(m)) return;
       if (ch.media === 'son' && !/youtu/.test(m)) return;
-      pool.push([r.id, Number(r.difficulte) || 1, Number(r.utilisations) || 0,
-        r.dernier_jeu ? new Date(r.dernier_jeu).getTime() : 0]);
+      pool.push([r.id, effDiff(r), Number(r.utilisations) || 0,
+        r.dernier_jeu ? new Date(r.dernier_jeu).getTime() : 0,
+        isBlind(r) ? 1 : 0]);
     });
     return pool;
   });
@@ -188,7 +210,9 @@ export function pickId(pool, level, used) {
   const usageMax = Math.max.apply(null, usages.concat([1]));
 
   const note = p => {
-    const ecart = Math.abs((Number(p[1]) || 1) - level);
+    // Blind test : la difficulté ne vient pas du morceau (tout le monde n'a pas la
+    // même culture) mais de la forme de la réponse. On ne filtre donc pas par niveau.
+    const ecart = p[4] ? 0 : Math.abs((Number(p[1]) || 1) - level);
     // le niveau pèse lourd, sans être une barrière : s'éloigner de deux crans
     // reste possible, s'éloigner de quatre devient rare
     let n = Math.pow(0.42, ecart);
@@ -491,8 +515,11 @@ export function loadQuestion(r, st, families) {
       q.type = 'SAISIE';
       q.secret.formes = acceptedForms(rep, q.text);
       const cible = answerTarget(rep, q.text);
-      q.lettres = cible.replace(/[^A-Za-zÀ-ÿ0-9]/g, '').length;
-      q.initiale = cible.charAt(0).toUpperCase();
+      // Échelle de difficulté par la forme : au dernier niveau, plus aucune aide
+      if (level < 5) {
+        q.lettres = cible.replace(/[^A-Za-zÀ-ÿ0-9]/g, '').length;
+        q.initiale = cible.charAt(0).toUpperCase();
+      }
     } else {
       const fixed = [r.choix2, r.choix3, r.choix4].map(x => String(x == null ? '' : x).trim()).filter(x => x && x !== rep);
       let wrong = fixed;

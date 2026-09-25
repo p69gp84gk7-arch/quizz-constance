@@ -90,6 +90,14 @@ console.log('\n3. Erreurs');
   ok(r2.error && r2.data === null, 'une panne serveur rend une erreur, jamais de fausses données');
 }
 
+console.log('\n3 bis. Fonctions SQL');
+{
+  reply = { status: 200, body: '42' };
+  const r = await db.rpc('recalculer_difficulte');
+  ok(last().method === 'POST' && last().url === '/rest/v1/rpc/recalculer_difficulte', 'la fonction SQL est appelée : ' + last().url);
+  ok(r.data === 42, 'sa valeur de retour est transmise');
+}
+
 console.log('\n4. Connexion du maître du jeu');
 {
   reply = { status: 200, body: JSON.stringify({ id: 'uuid-123', email: 'mj@test.fr' }) };

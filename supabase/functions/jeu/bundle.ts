@@ -81,7 +81,7 @@ function createDb(url, serviceKey, opts) {
     let rangeHdr = null;
 
     const url = () => {
-      const parts = filters.map(([c, v]) => enc(c) + '=eq.' + enc(v)).concat(q);
+      const parts = filters.map(([c, v, op]) => enc(c) + '=' + (op || 'eq') + '.' + enc(v)).concat(q);
       return table + (parts.length ? '?' + parts.join('&') : '');
     };
 
@@ -108,6 +108,8 @@ function createDb(url, serviceKey, opts) {
 
     const api = {
       eq(col, val) { filters.push([col, String(val)]); return api; },
+      /** Motif SQL : « Blind test% » = commence par. */
+      like(col, motif) { filters.push([col, String(motif), 'like']); return api; },
       order(col, o) { q.push('order=' + enc(col) + '.' + (!o || o.ascending !== false ? 'asc' : 'desc')); return api; },
       limit(n) { q.push('limit=' + Number(n)); return api; },
       range(a, b) { rangeHdr = a + '-' + b; return api; },
@@ -134,6 +136,15 @@ function createDb(url, serviceKey, opts) {
         upsert: (p, o) => builder(table, 'upsert', p, o),
         delete: () => builder(table, 'delete'),
       };
+    },
+
+    /** Appelle une fonction SQL (ex. recalculer_difficulte). */
+    async rpc(nom, params) {
+      const r = await send('rpc/' + encodeURIComponent(nom), {
+        method: 'POST',
+        body: JSON.stringify(params || {}),
+      });
+      return r;
     },
 
     /** Vérifie le jeton du maître du jeu auprès de Supabase Auth. */
@@ -226,6 +237,9 @@ function normalizeSettings(s) {
       dates: !!c.dates,
       nb: clamp(c.nb, 1, 50, 15),
       level: clamp(c.level, 1, 5, 1),
+      // Sélection à la main : uniquement ces questions (ids), ou tout sauf celles-là (exclus)
+      ids: (c.ids || []).map(String),
+      exclus: (c.exclus || []).map(String),
     };
   });
   if (!chapters.length) {
@@ -277,12 +291,30 @@ function isImage(url) {
   return !!url && !/youtu/.test(url);
 }
 
-/** Pool d'un chapitre : [id, difficulté, utilisations] pour chaque question retenue. */
+/** Difficulté réellement utilisée : celle mesurée sur les parties si elle existe, sinon la note d'origine. */
+function effDiff(r) {
+  const m = Number(r.difficulte_mesuree);
+  return m >= 1 && m <= 5 ? m : (Number(r.difficulte) || 1);
+}
+
+/** Les blind tests dépendent de la culture de chacun : leur note n'est pas fiable. */
+function isBlind(r) {
+  return /^blind test/i.test(String(r.theme || ''));
+}
+
+/** Pool d'un chapitre : [id, difficulté, utilisations, dernier passage, souple] pour chaque question retenue. */
 function buildPools(settings, questions) {
   return settings.chapters.map(ch => {
     const pool = [];
+    const choisies = ch.ids && ch.ids.length ? ch.ids : null;
+    const ecartees = ch.exclus && ch.exclus.length ? ch.exclus : null;
     questions.forEach(r => {
       if (String(r.actif || 'oui').toLowerCase() === 'non' || !r.question) return;
+      // Liste choisie à la main par le maître du jeu : elle a le dernier mot
+      if (choisies) { if (choisies.indexOf(String(r.id)) < 0) return; }
+      else if (ecartees && ecartees.indexOf(String(r.id)) >= 0) return;
+      if (choisies) { pool.push([r.id, effDiff(r), Number(r.utilisations) || 0,
+        r.dernier_jeu ? new Date(r.dernier_jeu).getTime() : 0, isBlind(r) ? 1 : 0]); return; }
       if (ch.themes.length && ch.themes.indexOf(String(r.theme)) < 0) return;
       if (ch.cats.length && ch.cats.indexOf(String(r.categorie)) < 0) return;
       if (ch.eras.length && ch.eras.indexOf(String(r.epoque || '')) < 0) return;
@@ -293,8 +325,9 @@ function buildPools(settings, questions) {
       if (ch.media === 'sans' && m) return;
       if (ch.media === 'photo' && !isImage(m)) return;
       if (ch.media === 'son' && !/youtu/.test(m)) return;
-      pool.push([r.id, Number(r.difficulte) || 1, Number(r.utilisations) || 0,
-        r.dernier_jeu ? new Date(r.dernier_jeu).getTime() : 0]);
+      pool.push([r.id, effDiff(r), Number(r.utilisations) || 0,
+        r.dernier_jeu ? new Date(r.dernier_jeu).getTime() : 0,
+        isBlind(r) ? 1 : 0]);
     });
     return pool;
   });
@@ -347,7 +380,9 @@ function pickId(pool, level, used) {
   const usageMax = Math.max.apply(null, usages.concat([1]));
 
   const note = p => {
-    const ecart = Math.abs((Number(p[1]) || 1) - level);
+    // Blind test : la difficulté ne vient pas du morceau (tout le monde n'a pas la
+    // même culture) mais de la forme de la réponse. On ne filtre donc pas par niveau.
+    const ecart = p[4] ? 0 : Math.abs((Number(p[1]) || 1) - level);
     // le niveau pèse lourd, sans être une barrière : s'éloigner de deux crans
     // reste possible, s'éloigner de quatre devient rare
     let n = Math.pow(0.42, ecart);
@@ -650,8 +685,11 @@ function loadQuestion(r, st, families) {
       q.type = 'SAISIE';
       q.secret.formes = acceptedForms(rep, q.text);
       const cible = answerTarget(rep, q.text);
-      q.lettres = cible.replace(/[^A-Za-zÀ-ÿ0-9]/g, '').length;
-      q.initiale = cible.charAt(0).toUpperCase();
+      // Échelle de difficulté par la forme : au dernier niveau, plus aucune aide
+      if (level < 5) {
+        q.lettres = cible.replace(/[^A-Za-zÀ-ÿ0-9]/g, '').length;
+        q.initiale = cible.charAt(0).toUpperCase();
+      }
     } else {
       const fixed = [r.choix2, r.choix3, r.choix4].map(x => String(x == null ? '' : x).trim()).filter(x => x && x !== rep);
       let wrong = fixed;
@@ -1151,7 +1189,7 @@ const ADMIN_ACTIONS = new Set([
   'adminCreateGame', 'adminState', 'adminNext', 'adminStartTimer', 'adminReveal', 'adminShowScores',
   'adminSkip', 'adminEnd', 'adminMedia', 'adminSetLevel', 'adminUpdateSettings', 'adminKick',
   'adminShuffleTeams', 'adminCatalog', 'adminAddQuestion', 'adminMontages', 'adminSaveMontage',
-  'adminDeleteMontage', 'adminLeaderboard',
+  'adminDeleteMontage', 'adminLeaderboard', 'adminBlindList',
 ]);
 
 function createActions(db) {
@@ -1162,7 +1200,7 @@ function createActions(db) {
 
   // Pour composer une partie, seules ces colonnes servent : inutile de transporter
   // les explications, indices et anecdotes des 1 521 questions.
-  const COLS_LEGERES = 'id,theme,categorie,difficulte,type,question,media_url,epoque,actif,utilisations,est_annee,dernier_jeu';
+  const COLS_LEGERES = 'id,theme,categorie,difficulte,difficulte_mesuree,type,question,media_url,epoque,actif,utilisations,est_annee,dernier_jeu';
 
   /** Toutes les questions (au-delà de la limite de 1 000 lignes par requête). */
   async function allQuestions(cols) {
@@ -1329,6 +1367,8 @@ function createActions(db) {
     st.persisted = true;
     const rk = ranking(st, players);
     const s = st.settings;
+    // Les résultats de cette partie affinent la difficulté des questions jouées
+    await db.rpc('recalculer_difficulte').catch(() => {});
     check(await db.from('parties').upsert({
       code: st.code, jouee_le: nowISO(),
       chapitres: s.chapters.map(c => c.name + ' (' + c.nb + ')').join(' · '),
@@ -1398,6 +1438,30 @@ function createActions(db) {
           if (m) out.withMedia++;
         });
         return out;
+      }
+
+      /**
+       * La liste des extraits d'un blind test, pour que le maître du jeu voie et
+       * choisisse ce qui va passer. On rend la réponse (artiste – titre), le lien,
+       * et l'historique de passage.
+       */
+      case 'adminBlindList': {
+        const theme = String(p.theme || '');
+        const q = db.from('questions').select(
+          'id,theme,categorie,difficulte,difficulte_mesuree,stats_n,stats_reussite,question,reponse,media_url,media_debut,media_duree,epoque,actif,utilisations,dernier_jeu');
+        // le filtre part à la base : sinon la limite de 1 000 lignes couperait la liste
+        const { data } = check(await (theme ? q.eq('theme', theme) : q.like('theme', 'Blind test%')).limit(1000));
+        const liste = (data || []).map(r => ({
+            id: r.id, theme: r.theme, cat: r.categorie, question: r.question, reponse: r.reponse,
+            diff: effDiff(r), diffAuteur: Number(r.difficulte) || 1,
+            mesuree: r.difficulte_mesuree ? Number(r.difficulte_mesuree) : null,
+            vus: Number(r.stats_n) || 0, reussite: r.stats_reussite === null ? null : Number(r.stats_reussite),
+            epoque: r.epoque || '', actif: String(r.actif || 'oui').toLowerCase() !== 'non',
+            url: r.media_url, debut: Number(r.media_debut) || 0, duree: Number(r.media_duree) || 15,
+            joue: Number(r.utilisations) || 0, dernier: r.dernier_jeu || null,
+          }))
+          .sort((a, b) => a.theme.localeCompare(b.theme) || String(a.cat).localeCompare(String(b.cat)) || a.reponse.localeCompare(b.reponse));
+        return { liste: liste };
       }
 
       case 'adminCreateGame': {
@@ -1729,7 +1793,7 @@ function createActions(db) {
 
 
 /** Version du serveur : renvoyée par l'action « time », pour vérifier ce qui est déployé. */
-const BUILD = '2026-09-25-3be86a';
+const BUILD = '2026-09-25-cf1ce8';
 
 const db = createDb(
   Deno.env.get('SUPABASE_URL') ?? '',

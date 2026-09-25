@@ -16,7 +16,7 @@ export const ADMIN_ACTIONS = new Set([
   'adminCreateGame', 'adminState', 'adminNext', 'adminStartTimer', 'adminReveal', 'adminShowScores',
   'adminSkip', 'adminEnd', 'adminMedia', 'adminSetLevel', 'adminUpdateSettings', 'adminKick',
   'adminShuffleTeams', 'adminCatalog', 'adminAddQuestion', 'adminMontages', 'adminSaveMontage',
-  'adminDeleteMontage', 'adminLeaderboard',
+  'adminDeleteMontage', 'adminLeaderboard', 'adminBlindList',
 ]);
 
 export function createActions(db) {
@@ -27,7 +27,7 @@ export function createActions(db) {
 
   // Pour composer une partie, seules ces colonnes servent : inutile de transporter
   // les explications, indices et anecdotes des 1 521 questions.
-  const COLS_LEGERES = 'id,theme,categorie,difficulte,type,question,media_url,epoque,actif,utilisations,est_annee,dernier_jeu';
+  const COLS_LEGERES = 'id,theme,categorie,difficulte,difficulte_mesuree,type,question,media_url,epoque,actif,utilisations,est_annee,dernier_jeu';
 
   /** Toutes les questions (au-delà de la limite de 1 000 lignes par requête). */
   async function allQuestions(cols) {
@@ -194,6 +194,8 @@ export function createActions(db) {
     st.persisted = true;
     const rk = E.ranking(st, players);
     const s = st.settings;
+    // Les résultats de cette partie affinent la difficulté des questions jouées
+    await db.rpc('recalculer_difficulte').catch(() => {});
     check(await db.from('parties').upsert({
       code: st.code, jouee_le: nowISO(),
       chapitres: s.chapters.map(c => c.name + ' (' + c.nb + ')').join(' · '),
@@ -263,6 +265,30 @@ export function createActions(db) {
           if (m) out.withMedia++;
         });
         return out;
+      }
+
+      /**
+       * La liste des extraits d'un blind test, pour que le maître du jeu voie et
+       * choisisse ce qui va passer. On rend la réponse (artiste – titre), le lien,
+       * et l'historique de passage.
+       */
+      case 'adminBlindList': {
+        const theme = String(p.theme || '');
+        const q = db.from('questions').select(
+          'id,theme,categorie,difficulte,difficulte_mesuree,stats_n,stats_reussite,question,reponse,media_url,media_debut,media_duree,epoque,actif,utilisations,dernier_jeu');
+        // le filtre part à la base : sinon la limite de 1 000 lignes couperait la liste
+        const { data } = check(await (theme ? q.eq('theme', theme) : q.like('theme', 'Blind test%')).limit(1000));
+        const liste = (data || []).map(r => ({
+            id: r.id, theme: r.theme, cat: r.categorie, question: r.question, reponse: r.reponse,
+            diff: E.effDiff(r), diffAuteur: Number(r.difficulte) || 1,
+            mesuree: r.difficulte_mesuree ? Number(r.difficulte_mesuree) : null,
+            vus: Number(r.stats_n) || 0, reussite: r.stats_reussite === null ? null : Number(r.stats_reussite),
+            epoque: r.epoque || '', actif: String(r.actif || 'oui').toLowerCase() !== 'non',
+            url: r.media_url, debut: Number(r.media_debut) || 0, duree: Number(r.media_duree) || 15,
+            joue: Number(r.utilisations) || 0, dernier: r.dernier_jeu || null,
+          }))
+          .sort((a, b) => a.theme.localeCompare(b.theme) || String(a.cat).localeCompare(String(b.cat)) || a.reponse.localeCompare(b.reponse));
+        return { liste: liste };
       }
 
       case 'adminCreateGame': {

@@ -256,6 +256,34 @@ console.log('\n3. L\'interface du maître du jeu');
   ok(M.txt().indexOf(q.text) >= 0, 'la question s\'affiche côté maître du jeu');
   ok(M.txt().indexOf(q.answerText) >= 0, 'avec la bonne réponse, visible seulement ici');
 
+  // La liste des extraits du blind test, choisie à la main
+  M.win.eval("showTab('preparer')");
+  await wait(60);
+  const ch = M.win.eval('JSON.stringify(A.draft.chapters[0])');
+  ok(/"autoName":true/.test(ch), 'le chapitre se nomme automatiquement');
+  M.win.eval("A.draft.chapters[0].themes = ['Blind test musique']; refreshChapterNames(A.draft); renderPreparer();");
+  await wait(40);
+  ok(M.win.eval('A.draft.chapters[0].name') === 'Blind test musique', 'le titre suit le thème coché');
+
+  M.doc.querySelector('[data-extraits]').click();
+  await wait(200);
+  const modalTxt = M.doc.body.textContent.replace(/\s+/g, ' ');
+  ok(/Extraits du blind test/.test(modalTxt), 'la fenêtre des extraits s\'ouvre');
+  const cases = M.doc.querySelectorAll('[data-bid]');
+  ok(cases.length > 100, cases.length + ' extraits listés avec leur réponse');
+  ok(/Queen/.test(modalTxt) || /Michael Jackson/.test(modalTxt), 'on lit bien les artistes et titres');
+  cases[0].checked = true; cases[0].onchange();
+  cases[1].checked = true; cases[1].onchange();
+  await wait(60);
+  ok(M.win.eval('A.draft.chapters[0].ids.length') === 2, 'les extraits cochés sont retenus');
+  ok(/2 extraits choisis/.test(M.win.eval('chapterAutoName(A.draft.chapters[0])')), 'le titre mentionne la sélection');
+  M.doc.querySelector('#bf-none').click();
+  await wait(40);
+  ok(M.win.eval('A.draft.chapters[0].ids.length') === 0, '« tout décocher » revient au tirage automatique');
+  M.doc.querySelector('#bf-ok').click();
+  await wait(60);
+  M.win.eval("showTab('partie')");
+
   // Le joueur répond, la correction en direct s'affiche
   endIntro(code);
   await handle('playerAnswer', { code, pid: 'mmmmmmmm1111', qIndex: 0, answer: q.correct });

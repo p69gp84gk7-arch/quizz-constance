@@ -26,6 +26,7 @@ function chapterAutoName(c) {
   if (c.eras.length === 1) bouts.push(c.eras[0]);
   else if (c.eras.length > 1) bouts.push(c.eras.length + ' époques');
 
+  if (c.ids && c.ids.length) bouts.push(c.ids.length + ' extraits choisis');
   if (c.dates) bouts.push('📅 Dates');
   if (c.media === 'photo') bouts.push('📸 Photos');
   else if (c.media === 'son') bouts.push('🎧 Extraits');
@@ -263,6 +264,7 @@ function chapterCard(c, i) {
         <option value="avec" ${c.media === 'avec' ? 'selected' : ''}>Photos et extraits</option>
         <option value="sans" ${c.media === 'sans' ? 'selected' : ''}>Sans média</option></select>
       <button class="chip ${c.dates ? 'on' : ''}" data-dates>📅 Questions de dates</button>
+      <button class="btn small" data-extraits>🎧 Choisir les extraits${c.ids && c.ids.length ? ' (' + c.ids.length + ')' : ''}</button>
       <span class="spacer"></span>
       <span class="pill" style="${avail < c.nb ? 'background:var(--ko);color:#fff' : ''}">≈ ${avail} disponibles</span>
     </div>
@@ -308,6 +310,8 @@ function bindPreparer() {
     if (dt) dt.onclick = () => { c.dates = !c.dates; rerender(); };
     const an = card.querySelector('[data-autoname]');
     if (an) an.onclick = () => { c.autoName = true; rerender(); };
+    const ex = card.querySelector('[data-extraits]');
+    if (ex) ex.onclick = () => choisirExtraits(c, rerender);
     card.querySelectorAll('[data-type]').forEach(b => b.onclick = () => {
       toggle(c.types, b.dataset.type);
       if (!c.types.length) c.types = ALL_TYPES.slice();
@@ -369,6 +373,90 @@ function bindPreparer() {
       startPolling();
     }).catch(e => toast(e, true)).finally(() => { btn.disabled = false; btn.textContent = '▶ Créer la partie'; });
   };
+}
+
+/* ---------------- Choisir les extraits d'un blind test ---------------- */
+
+A.blind = null;      // liste chargée une fois par session
+A.blindFiltre = { texte: '', theme: '', cat: '' };
+
+/**
+ * Ouvre la liste des extraits : le maître du jeu écoute, coche ce qu'il garde,
+ * et voit lesquels sont déjà passés. Rien n'est coché = le tirage habituel.
+ */
+function choisirExtraits(c, apres) {
+  const m = modal('<h2>🎧 Extraits du blind test</h2><p class="muted">Chargement de la liste…</p>');
+  const dessine = () => {
+    const sel = new Set(c.ids || []);
+    const f = A.blindFiltre;
+    const themes = Array.from(new Set(A.blind.map(x => x.theme))).sort();
+    const cats = Array.from(new Set(A.blind.filter(x => !f.theme || x.theme === f.theme).map(x => x.cat).filter(Boolean))).sort();
+    const mots = f.texte.trim().toLowerCase();
+    const vus = A.blind.filter(x =>
+      (!f.theme || x.theme === f.theme) && (!f.cat || x.cat === f.cat) &&
+      (!mots || (x.reponse + ' ' + x.cat + ' ' + x.epoque).toLowerCase().indexOf(mots) >= 0));
+
+    const jours = d => {
+      if (!d) return '—';
+      const n = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+      return n <= 0 ? "aujourd'hui" : n === 1 ? 'hier' : 'il y a ' + n + ' j';
+    };
+
+    m.querySelector('.modal').innerHTML = `
+      <h2>🎧 Extraits du blind test</h2>
+      <p class="muted" style="margin:0">Cochez ce que vous voulez entendre pendant la partie.
+        Rien de coché = tirage automatique dans tout le thème.
+        <b>▶</b> ouvre l'extrait sur YouTube au bon moment pour le vérifier.</p>
+      <div class="row">
+        <input type="text" id="bf-texte" placeholder="Rechercher un artiste, un titre…" value="${esc(f.texte)}" class="grow">
+        <select id="bf-theme" style="width:auto"><option value="">Tous les thèmes</option>${themes.map(t => `<option ${f.theme === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+        <select id="bf-cat" style="width:auto"><option value="">Toutes les catégories</option>${cats.map(t => `<option ${f.cat === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+      </div>
+      <div class="row">
+        <span class="pill">${sel.size} choisi${sel.size > 1 ? 's' : ''} · ${vus.length} affiché${vus.length > 1 ? 's' : ''}</span>
+        <button class="btn small" id="bf-all">Tout cocher (affichés)</button>
+        <button class="btn small" id="bf-none">Tout décocher</button>
+        <button class="btn small" id="bf-jamais">Cocher ceux jamais joués</button>
+        <span class="spacer"></span>
+        <button class="btn primary" id="bf-ok">Valider</button>
+      </div>
+      <div style="max-height:52vh;overflow:auto">
+        <table class="tbl"><thead><tr><th></th><th>Réponse</th><th>Catégorie</th><th class="num">Niveau</th>
+          <th class="num">Joué</th><th>Dernière fois</th><th class="num">Réussite</th><th></th></tr></thead>
+        <tbody>${vus.map(x => `<tr>
+          <td><input type="checkbox" data-bid="${esc(x.id)}" ${sel.has(x.id) ? 'checked' : ''}></td>
+          <td><b>${esc(x.reponse)}</b>${x.actif ? '' : ' <span class="muted">(désactivée)</span>'}</td>
+          <td>${esc(x.cat || '')}${x.epoque ? ' · ' + esc(x.epoque) : ''}</td>
+          <td class="num">${levelStars(Math.round(x.diff))}${x.mesuree ? ' <span class="muted" title="difficulté mesurée sur les parties jouées">mesurée</span>' : ''}</td>
+          <td class="num">${x.joue}</td>
+          <td>${jours(x.dernier)}</td>
+          <td class="num">${x.reussite === null ? '—' : x.reussite + ' %'}</td>
+          <td><a class="btn small" href="${esc(x.url)}${x.url.indexOf('?') >= 0 ? '&' : '?'}t=${x.debut}" target="_blank" rel="noreferrer">▶</a></td>
+        </tr>`).join('')}</tbody></table>
+      </div>`;
+
+    const on = (sel2, ev, fn) => { const el = m.querySelector(sel2); if (el) el[ev] = fn; };
+    on('#bf-texte', 'oninput', e => { f.texte = e.target.value; dessine(); });
+    on('#bf-theme', 'onchange', e => { f.theme = e.target.value; f.cat = ''; dessine(); });
+    on('#bf-cat', 'onchange', e => { f.cat = e.target.value; dessine(); });
+    m.querySelectorAll('[data-bid]').forEach(cb => cb.onchange = () => {
+      const id = cb.dataset.bid;
+      c.ids = c.ids || [];
+      const i = c.ids.indexOf(id);
+      if (cb.checked) { if (i < 0) c.ids.push(id); } else if (i >= 0) c.ids.splice(i, 1);
+      saveDraft();
+      dessine();
+    });
+    on('#bf-all', 'onclick', () => { c.ids = Array.from(new Set((c.ids || []).concat(vus.map(x => x.id)))); saveDraft(); dessine(); });
+    on('#bf-none', 'onclick', () => { c.ids = []; saveDraft(); dessine(); });
+    on('#bf-jamais', 'onclick', () => { c.ids = vus.filter(x => !x.joue).map(x => x.id); saveDraft(); dessine(); });
+    on('#bf-ok', 'onclick', () => { m.remove(); apres(); });
+  };
+
+  const charger = A.blind ? Promise.resolve(A.blind) : rpc('adminBlindList', {}).then(r => (A.blind = r.liste));
+  charger.then(dessine).catch(e => {
+    m.querySelector('.modal').innerHTML = '<h2>🎧 Extraits</h2><p>Impossible de charger la liste : ' + esc(e.message || e) + '</p>';
+  });
 }
 
 /* ---------------- Quiz aléatoire ---------------- */
