@@ -7,7 +7,7 @@
 <title>Quizz</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Playfair+Display:wght@600;800&family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=2026-09-25-b">
+<link rel="stylesheet" href="styles.css?v=2026-09-25-c">
 <style>
   body { min-height: 100vh; }
   .wrap { max-width: 560px; margin: 0 auto; padding: 14px 14px 40px; min-height: 100vh; display: flex; flex-direction: column; gap: 14px; }
@@ -41,8 +41,8 @@
 <div class="wrap" id="app"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=2026-09-25-b"></script>
-<script src="commun.js?v=2026-09-25-b"></script>
+<script src="config.js?v=2026-09-25-c"></script>
+<script src="commun.js?v=2026-09-25-c"></script>
 <script>
 /* Code de la partie : ?p=XXXX (QR code) ou saisi à la main. */
 const INIT_CODE = (new URLSearchParams(location.search).get('p') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -51,6 +51,7 @@ const S = {
   pid: store('qc_pid') || (function () { const id = newId(); store('qc_pid', id); return id; })(),
   pseudo: store('qc_pseudo') || '',
   view: null, key: '', joined: false, local: null, soundFor: null, endSound: false, polling: false, lastTick: null,
+  audioPret: false,
 };
 const app = $('#app');
 
@@ -97,6 +98,7 @@ function screenJoin(msg) {
   $('#chg').onclick = () => { S.code = ''; store('qc_code', null); screenCode(); };
   $('#join').onclick = () => {
     Sound.unlock();
+    preparerSon();          // ce clic vaut autorisation de jouer du son plus tard
     const p = $('#pseudo').value.trim();
     if (p.length < 2) return toast('Pseudo trop court.', true);
     $('#join').disabled = true;
@@ -139,6 +141,9 @@ function onLive(state, row) {
   S.view = v;
   applyVisual(v.visual);
   Sound.enabled = v.sounds;
+  // Blind test : le son peut sortir sur les téléphones, si le MJ l'a choisi
+  const iciLeSon = v.audioOn === 'joueurs' || v.audioOn === 'tous';
+  MediaSync.apply(v, v.question, iciLeSon && S.audioPret);
   refresh();
   if (['LOBBY', 'CHAPTER', 'INTRO', 'SCORES'].indexOf(v.status) >= 0) preloadMap();
   // À la révélation et à la fin, mon résultat personnel n'est pas dans la vitrine commune :
@@ -198,10 +203,33 @@ function refresh() {
   const v = localPromote(S.view);
   const answered = v.me && (v.me.answered || (S.local && S.local.qIndex === v.qIndex));
   const hide = jokerHide(v);
-  const key = [v.status, v.qIndex, answered ? 1 : 0, S.local && S.local.t !== undefined ? 't' : '', v.me && v.me.result ? 'r' : 'w', v.status === 'REVEAL' || v.status === 'SCORES' || v.status === 'END' ? v.version : '', v.chapter ? v.chapter.idx : '',
+  const key = [v.status, v.qIndex, v.audioOn, S.audioPret ? 'son' : '', answered ? 1 : 0, S.local && S.local.t !== undefined ? 't' : '', v.me && v.me.result ? 'r' : 'w', v.status === 'REVEAL' || v.status === 'SCORES' || v.status === 'END' ? v.version : '', v.chapter ? v.chapter.idx : '',
     hide ? 'j' : '', v.me && v.me.out ? 'out' : '', v.me && v.me.spectator ? 'sp' : '', v.status === 'LOBBY' && v.me ? v.me.team : ''].join('|');
   if (key !== S.key) { S.key = key; render(v, answered); }
   updateHeader(v);
+}
+
+/** Débloque le son : un téléphone n'autorise la lecture qu'après un geste du joueur. */
+function preparerSon() {
+  try {
+    Sound.unlock();
+    AUDIO_PLAYER.unlock();
+    YT_PLAYER.init();
+    S.audioPret = true;
+    S.key = '';
+  } catch (e) { /* on réessaiera au prochain geste */ }
+}
+
+/** Bandeau proposé au joueur quand c'est son téléphone qui doit jouer les extraits. */
+function bandeauSon(v) {
+  if (v.audioOn !== 'joueurs' && v.audioOn !== 'tous') return '';
+  if (S.audioPret) return '<div class="muted center" style="font-size:13px">🔊 Le son des extraits sort sur ce téléphone. Mets des écouteurs si tu peux.</div>';
+  return '<button class="btn primary" id="sonon">🔊 Activer le son des extraits</button>';
+}
+
+function brancherSon() {
+  const b = $('#sonon');
+  if (b) b.onclick = () => { preparerSon(); refresh(); };
 }
 
 /* ---------------- Rendu ---------------- */
@@ -248,7 +276,9 @@ function render(v, answered) {
       app.innerHTML = h + `<div class="hero fade-in"><div class="big">⏳</div><h2>Tu es dans la partie !</h2>
         ${myTeam(v) ? `<div class="banner">Ton équipe : ${esc(myTeam(v).name)}</div>` : ''}
         ${v.format !== 'classique' ? `<p><b>${FORMAT_LABELS[v.format]}</b><br><span class="muted">${formatRule(v)}</span></p>` : ''}
-        <p class="muted">Le maître du jeu va bientôt lancer le quiz.<br>${v.playerCount} joueur${v.playerCount > 1 ? 's' : ''} connecté${v.playerCount > 1 ? 's' : ''}.</p></div>`;
+        <p class="muted">Le maître du jeu va bientôt lancer le quiz.<br>${v.playerCount} joueur${v.playerCount > 1 ? 's' : ''} connecté${v.playerCount > 1 ? 's' : ''}.</p>
+        ${bandeauSon(v)}</div>`;
+      brancherSon();
       break;
 
     case 'CHAPTER':
@@ -265,7 +295,9 @@ function render(v, answered) {
         ${multBadge(q)}
         ${duelBanner(v)}
         <div class="intro-count" id="icount">${introLeft(v)}</div>
-        <p class="muted">${v.me && v.me.out ? 'Tu es éliminé·e : regarde la suite !' : 'Prépare-toi !'}</p></div>`;
+        <p class="muted">${v.me && v.me.out ? 'Tu es éliminé·e : regarde la suite !' : 'Prépare-toi !'}</p>
+        ${S.audioPret ? '' : bandeauSon(v)}</div>`;
+      brancherSon();
       break;
 
     case 'READ':

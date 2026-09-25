@@ -5,7 +5,7 @@
 /** Version du serveur, renseignée au premier appel : sert à repérer un déploiement oublié. */
 let SERVER_BUILD = '?';
 
-const APP_VERSION = '2026-09-25-b';
+const APP_VERSION = '2026-09-25-c';
 
 const VISUALS = {
   plateau: 'Plateau TV', elegant: 'Élégant', pop: 'Pop', neon: 'Néon', nature: 'Nature', enfants: 'Enfants',

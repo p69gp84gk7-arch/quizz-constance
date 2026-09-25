@@ -5,6 +5,14 @@ const A = {
   busy: false, polling: false, key: '', autoRevealFor: null, presence: {}, tab: 'partie', fiches: {},
 };
 
+/** Où sort le son du blind test. */
+const AUDIO_OU = {
+  ecran: "sur l'écran public",
+  admin: 'sur mon appareil',
+  joueurs: 'sur les téléphones des joueurs',
+  tous: 'partout à la fois',
+};
+
 /* L'interface s'adapte à l'écran : téléphone, tablette ou ordinateur */
 function screenType() { const w = window.innerWidth; return w <= 700 ? 'phone' : w <= 1100 ? 'tablet' : 'desktop'; }
 function applyScreen() {
@@ -137,8 +145,7 @@ function onView(v) {
   A.view = v;
   applyVisual(v.visual);
   store('qc_visual', v.visual);
-  if (v.audioOn === 'admin') MediaSync.apply(v, v.current, true);
-  else MediaSync.apply(v, v.current, false);
+  MediaSync.apply(v, v.current, v.audioOn === 'admin' || v.audioOn === 'tous');
   checkPresence(v);
   refreshPartie();
 }
@@ -291,7 +298,7 @@ function mainCard(v) {
       <div class="muted" style="font-size:13px">Zone : ${ZONE_LABELS[q.zone] || q.zone} · tous les points à moins de ${fmtKm(q.target.full)}, plus rien au-delà d'une certaine distance (la précision exigée augmente avec le niveau).</div>`;
   }
   const media = q.media && q.media.kind === 'youtube'
-    ? `<div class="row"><span class="pill">🎵 Extrait YouTube · ${q.media.dur}s (${v.audioOn === 'admin' ? 'joué ici' : 'joué sur l\'écran public'})</span>
+    ? `<div class="row"><span class="pill">🎵 Extrait · ${q.media.dur}s (${AUDIO_OU[v.audioOn] || AUDIO_OU.ecran})</span>
         <button class="btn small" data-act onclick="act('adminMedia','play')">▶ Rejouer</button>
         <button class="btn small" data-act onclick="act('adminMedia','stop')">■ Stop</button></div>`
     : (q.media ? mediaHtml(q, false) + (q.media.fx ? `<div class="muted center" style="font-size:12px">Effet sur l'écran et les téléphones : ${q.media.fx === 'zoom' ? 'gros plan qui se dézoome' : 'image floue qui se précise'}</div>` : '') : '');
@@ -448,7 +455,8 @@ function settingsCard(v) {
   if (v.status === 'END') return '';
   return `<details class="card settings-card" ${screenType() === 'phone' ? '' : 'open'}><summary class="muted" style="cursor:pointer;font-weight:700">⚙️ Réglages en direct</summary><div class="row" style="font-size:14px;margin-top:8px">
     <label>Ambiance <select id="s-visual" style="width:auto">${Object.keys(VISUALS).map(k => `<option value="${k}" ${k === s.visual ? 'selected' : ''}>${VISUALS[k]}</option>`).join('')}</select></label>
-    <label>Blind test <select id="s-audio" style="width:auto"><option value="ecran" ${s.audioOn === 'ecran' ? 'selected' : ''}>son sur l'écran</option><option value="admin" ${s.audioOn === 'admin' ? 'selected' : ''}>son ici</option></select></label>
+    <label>Blind test <select id="s-audio" style="width:auto">${Object.keys(AUDIO_OU).map(k =>
+      `<option value="${k}" ${s.audioOn === k ? 'selected' : ''}>son ${AUDIO_OU[k]}</option>`).join('')}</select></label>
     <label class="switch"><input type="checkbox" id="s-sounds" ${s.sounds ? 'checked' : ''}> Sons</label>
     <label class="switch"><input type="checkbox" id="s-auto" ${s.autoReveal ? 'checked' : ''}> Révélation auto</label>
     <span class="muted">· ${s.duration}s · points : ${{ simple: '1 par bonne réponse', rapidite: 'rapidité', series: 'rapidité + séries' }[s.points]}${s.joker ? ' · 🃏 joker 50/50' : ''}${s.bonus ? ' · ⭐ questions en or' : ''}${s.finale ? ' · 🏁 finale ×3' : ''}</span>

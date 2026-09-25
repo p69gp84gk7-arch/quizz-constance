@@ -154,6 +154,26 @@ console.log("\n1. Le téléphone d'un joueur, de l'arrivée au résultat");
   ok(db.rows('players').length === 1, 'le joueur est inscrit en base');
   ok(/Tu es dans la partie/.test(P.txt()), 'il voit la salle d\'attente');
 
+  // le son sur les téléphones : le joueur doit d'abord l'autoriser
+  const g0 = db.rows('games')[0];
+  g0.state.settings.audioOn = 'joueurs';
+  await handle('adminState', { code });
+  const liveJ = db.rows('game_live')[0];
+  liveJ.state.audioOn = 'joueurs'; liveJ.seq++;
+  push(P.subs, 'game_live', code);
+  await wait(40);
+  // le geste de « Rejoindre la partie » a déjà débloqué le son : rien à demander de plus
+  ok(P.win.eval('S.audioPret') === true, 'le son est débloqué par le geste d\'arrivée dans la partie');
+  ok(/sort sur ce téléphone/.test(P.txt()), 'le joueur est averti que le son sortira de son téléphone');
+
+  // secours : si le navigateur avait refusé, un bouton est proposé
+  P.win.eval('S.audioPret = false; S.key = ""; refresh();');
+  await wait(40);
+  ok(/Activer le son/.test(P.txt()), 'sinon, un bouton « Activer le son » est proposé');
+  P.$('#sonon').click();
+  await wait(40);
+  ok(P.win.eval('S.audioPret') === true && /sort sur ce téléphone/.test(P.txt()), 'le bouton débloque bien le son');
+
   await handle('adminNext', { code });
   push(P.subs, 'game_live', code);
   await wait(30);

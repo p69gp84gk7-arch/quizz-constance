@@ -254,7 +254,9 @@ function normalizeSettings(s) {
     margePct: clamp(s.margePct, 1, 50, 10),
     visual: String(s.visual || 'plateau'),
     sounds: s.sounds !== false,
-    audioOn: s.audioOn === 'admin' ? 'admin' : 'ecran',
+    // Où sort le son du blind test : écran public, appareil du MJ, téléphones des
+    // joueurs, ou partout à la fois.
+    audioOn: ['ecran', 'admin', 'joueurs', 'tous'].indexOf(s.audioOn) >= 0 ? s.audioOn : 'ecran',
     chrono: 'auto', // le chrono démarre toujours seul à la fin du compte à rebours
     autoReveal: s.autoReveal !== false,
     choix: s.choix === 'fixes' ? 'fixes' : 'adaptatifs',
@@ -1798,7 +1800,7 @@ function createActions(db) {
 
 
 /** Version du serveur : renvoyée par l'action « time », pour vérifier ce qui est déployé. */
-const BUILD = '2026-09-25-e38c9d';
+const BUILD = '2026-09-25-62d326';
 
 const db = createDb(
   Deno.env.get('SUPABASE_URL') ?? '',

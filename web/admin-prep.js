@@ -179,7 +179,8 @@ function renderPreparer() {
             <select data-k="saisieNiveau" style="width:auto;display:inline-block">${[2, 3, 4, 5].map(n => `<option value="${n}" ${d.saisieNiveau == n ? 'selected' : ''}>${'★'.repeat(n)}</option>`).join('')}</select>
             : il faut alors écrire la réponse. Les accents et une faute de frappe sont pardonnés.</div></div>
         <div><label class="lbl">Son du blind test</label><select data-k="audioOn">
-          ${opt('ecran', d.audioOn, 'Sur l\'écran public')}${opt('admin', d.audioOn, 'Sur mon appareil')}</select></div>
+          ${opt('ecran', d.audioOn, 'Sur l\'écran public')}${opt('admin', d.audioOn, 'Sur mon appareil')}${opt('joueurs', d.audioOn, 'Sur les téléphones des joueurs')}${opt('tous', d.audioOn, 'Partout à la fois')}</select>
+          ${d.audioOn === 'joueurs' || d.audioOn === 'tous' ? '<div class="muted" style="font-size:12px">Chaque joueur devra toucher « 🔊 Activer le son » en arrivant : les téléphones interdisent de lancer un son sans geste de leur part. Prévenez-les d\'utiliser des écouteurs, sinon les extraits se chevauchent d\'un téléphone à l\'autre.</div>' : ''}</div>
         <div><label class="lbl">Ambiance</label><select data-k="visual">${Object.keys(VISUALS).map(k => opt(k, d.visual, VISUALS[k])).join('')}</select></div>
         <div class="col" style="gap:6px;justify-content:flex-end">
           <label class="switch"><input type="checkbox" data-k="sounds" ${d.sounds ? 'checked' : ''}> Sons (bonne/mauvaise réponse)</label>

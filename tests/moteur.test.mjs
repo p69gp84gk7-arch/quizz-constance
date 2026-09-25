@@ -320,6 +320,16 @@ console.log('\n8 bis. QCM en facile, clavier en difficile');
   ok(longue.type === 'QCM', 'une réponse à rallonge reste en QCM');
 }
 
+/* ================= 8 ter. Où sort le son du blind test ================= */
+console.log('\n8 ter. Destination du son');
+{
+  const d = k => E.normalizeSettings({ audioOn: k }).audioOn;
+  ok(d('ecran') === 'ecran' && d('admin') === 'admin', 'écran public et appareil du MJ');
+  ok(d('joueurs') === 'joueurs', 'sur les téléphones des joueurs');
+  ok(d('tous') === 'tous', 'partout à la fois');
+  ok(d('n\'importe quoi') === 'ecran', 'une valeur inconnue retombe sur l\'écran public');
+}
+
 /* ================= 9. Pools : filtres de préparation ================= */
 console.log('\n9. Filtres de préparation');
 {
