@@ -283,23 +283,57 @@ console.log('\n8. Contrôles d\'entrée');
 }
 
 /* ================= 8 bis. La difficulté change la forme de la réponse ================= */
-console.log('\n8 bis. QCM en facile, clavier en difficile');
+console.log('\n8 bis. QCM partout, clavier seulement sur les plus dures');
 {
-  const q = { id: 'X', theme: 'Musique', categorie: '', difficulte: 3, type: 'QCM',
+  const base = { id: 'X', theme: 'Musique', categorie: '', type: 'QCM',
     question: '🎵 Quel est ce titre ?', reponse: 'Queen – Bohemian Rhapsody', choix2: 'A', choix3: 'B', choix4: 'C' };
-  const st = n => ({ level: n, settings: E.normalizeSettings({ saisie: 'auto', saisieNiveau: 4, choix: 'fixes' }) });
+  const q = d => Object.assign({}, base, { difficulte: d });
+  const st = n => ({ level: n, settings: E.normalizeSettings({ saisie: 'auto', choix: 'fixes' }) });
 
-  const facile = E.loadQuestion(q, st(2), {});
-  ok(facile.type === 'QCM' && facile.choices.length === 4, 'niveau 2 : 4 propositions');
-  const dur = E.loadQuestion(q, st(4), {});
-  ok(dur.type === 'SAISIE' && !dur.choices, 'niveau 4 : il faut taper la réponse');
-  // les indices portent sur ce qu'on attend vraiment : le titre, pas « artiste + titre »
+  ok(E.normalizeSettings({}).saisieNiveau === 4.5, 'par défaut, on ne tape la réponse qu\'à partir de ★★★★ et demie');
+  ok(E.loadQuestion(q(3), st(3), {}).type === 'QCM', '3 ★ : 4 propositions');
+  ok(E.loadQuestion(q(4), st(4), {}).type === 'QCM', '4 ★ : encore un QCM, même à niveau élevé');
+  // c'est la difficulté de la QUESTION qui décide, pas le niveau où en est la partie
+  const dur = E.loadQuestion(q(5), st(3), {});
+  ok(dur.type === 'SAISIE' && !dur.choices, '5 ★ : il faut taper la réponse');
+
+  // la difficulté mesurée sur les vraies parties prime sur la note d'origine
+  const mesuree = E.loadQuestion(Object.assign(q(2), { difficulte_mesuree: 4.7 }), st(2), {});
+  ok(mesuree.type === 'SAISIE', 'une question notée 2 ★ mais mesurée à 4,7 passe au clavier');
+
+  // on ne demande que ce que la question demande
+  ok(dur.answerText === 'Bohemian Rhapsody', 'la réponse attendue est le titre seul : ' + dur.answerText);
+  ok(dur.answerMore === 'Queen – Bohemian Rhapsody', 'la référence complète reste affichée à part');
+  ok(/titre/.test(dur.attente), 'le joueur lit ce qu\'on attend : ' + dur.attente);
   ok(dur.lettres === 16 && dur.initiale === 'B', 'indices justes : ' + dur.lettres + ' lettres, commence par ' + dur.initiale);
-  const qui = E.loadQuestion(Object.assign({}, q, { question: 'Qui chante ce titre ?' }), st(4), {});
+  const qui = E.loadQuestion(Object.assign({}, base, { difficulte: 5, question: 'Qui chante ce titre ?' }), st(3), {});
   ok(qui.initiale === 'Q' && qui.lettres === 5, 'sur « qui chante ? », l\'indice porte sur l\'artiste');
+  ok(/interpr/.test(qui.attente), 'et on demande bien l\'interprète : ' + qui.attente);
 
-  const jamais = E.loadQuestion(q, { level: 5, settings: E.normalizeSettings({ saisie: 'jamais' }) }, {});
+  // en QCM aussi : quatre titres, pas quatre « artiste – titre »
+  const fam = { 'Musique|🎵 Quel est ce titre ?': [
+    ['Queen – Bohemian Rhapsody', '', ''], ['Blur – Song 2', '', ''],
+    ['Oasis – Wonderwall', '', ''], ['Nirvana – Come as You Are', '', ''],
+  ] };
+  const qcm = E.loadQuestion(Object.assign(q(2), { choix2: '', choix3: '', choix4: '' }),
+    { level: 2, settings: E.normalizeSettings({ saisie: 'auto' }) }, fam);
+  ok(qcm.choices.every(c => c.indexOf('–') < 0), 'les propositions ne montrent que le titre : ' + qcm.choices.join(' / '));
+  ok(qcm.choices[qcm.secret.correct] === 'Bohemian Rhapsody', 'et la bonne reste la bonne');
+  ok(new Set(qcm.choices).size === qcm.choices.length, 'quatre propositions différentes');
+
+  // si raccourcir créait un doublon, on garde les propositions entières
+  const memeTitre = { 'Musique|🎵 Quel est ce titre ?': [
+    ['Queen – Bohemian Rhapsody', '', ''], ['Panic! – Bohemian Rhapsody', '', ''],
+    ['Oasis – Wonderwall', '', ''], ['Blur – Song 2', '', ''],
+  ] };
+  const ambigu = E.loadQuestion(Object.assign(q(2), { choix2: '', choix3: '', choix4: '' }),
+    { level: 2, settings: E.normalizeSettings({ saisie: 'auto' }) }, memeTitre);
+  ok(new Set(ambigu.choices).size === 4, 'deux fois le même titre : on réaffiche les artistes');
+
+  const jamais = E.loadQuestion(q(5), { level: 5, settings: E.normalizeSettings({ saisie: 'jamais' }) }, {});
   ok(jamais.type === 'QCM', 'le maître du jeu peut désactiver la saisie');
+  const toujours = E.loadQuestion(q(1), { level: 1, settings: E.normalizeSettings({ saisie: 'toujours' }) }, {});
+  ok(toujours.type === 'SAISIE', '… ou l\'imposer partout');
 
   // correction de la saisie
   const players = { p1: { pseudo: 'A', score: 0 }, p2: { pseudo: 'B', score: 0 }, p3: { pseudo: 'C', score: 0 } };
@@ -313,11 +347,34 @@ console.log('\n8 bis. QCM en facile, clavier en difficile');
   ok(res.p1.ok, 'réponse exacte acceptée');
   ok(res.p2.ok, 'faute de frappe pardonnée');
   ok(!res.p3.ok, 'mauvaise réponse refusée');
+  ok(E.doReveal(Object.assign({}, jeu, { reveal: null }), players, { p1: { a: 'Queen – Bohemian Rhapsody', t: 5 } }).p1.ok,
+    'la réponse complète reste acceptée si le joueur l\'écrit en entier');
 
   // une réponse trop longue reste en QCM : on ne demande pas de réciter une phrase
   const longue = E.loadQuestion({ id: 'Y', theme: 'T', difficulte: 5, type: 'QCM', question: 'Que dit-il ?',
     reponse: 'Un jour je serai le meilleur dresseur de toute la région de Kanto', choix2: 'a', choix3: 'b', choix4: 'c' }, st(5), {});
   ok(longue.type === 'QCM', 'une réponse à rallonge reste en QCM');
+}
+
+/* ================= 8 quater. Chaque chapitre a ses propres règles ================= */
+console.log('\n8 quater. Les règles vivent dans le chapitre');
+{
+  const s = E.normalizeSettings({
+    duration: 30, points: 'rapidite', saisie: 'auto', joker: true,
+    chapters: [
+      { name: 'Échauffement', nb: 5, level: 1 },
+      { name: 'Finale', nb: 5, level: 3, regles: { duration: 15, points: 'simple', joker: false, choix: 'fixes' } },
+    ],
+  });
+  ok(s.chapters[1].regles.duration === 15, 'le chapitre garde sa durée');
+  ok(s.chapters[1].regles.choix === 'fixes', 'et sa façon de tirer les propositions');
+  const st = i => ({ settings: s, chapIndex: i });
+  ok(E.rules(st(0)).duration === 30 && E.rules(st(0)).points === 'rapidite', 'chapitre 1 : les règles de la partie');
+  const r = E.rules(st(1));
+  ok(r.duration === 15 && r.points === 'simple' && r.joker === false && r.choix === 'fixes', 'chapitre 2 : les siennes');
+  ok(r.maxPlayers === s.maxPlayers, 'ce que le chapitre ne dit pas reste celui de la partie');
+  const abime = E.rules({ settings: E.normalizeSettings({ duration: 30, chapters: [{ nb: 5, regles: { duration: 999 } }] }), chapIndex: 0 });
+  ok(abime.duration === 120, 'une durée délirante dans un chapitre est ramenée dans les clous');
 }
 
 /* ================= 8 ter. Où sort le son du blind test ================= */

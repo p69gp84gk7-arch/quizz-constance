@@ -223,7 +223,7 @@ const clamp = (v, a, b, d) => { v = Number(v); return isNaN(v) ? d : Math.max(a,
 /* ------------------------------------------------------------------ */
 
 /** Réglages qu'un chapitre peut redéfinir pour lui seul. */
-const REGLES_CHAPITRE = ['duration', 'points', 'estimation', 'margePct', 'estimQcm',
+const REGLES_CHAPITRE = ['duration', 'points', 'estimation', 'margePct', 'estimQcm', 'choix',
   'saisie', 'saisieNiveau', 'joker', 'bonus', 'autoReveal'];
 
 function normalizeSettings(s) {
@@ -272,7 +272,10 @@ function normalizeSettings(s) {
     // « auto » : QCM aux niveaux faciles, saisie au clavier quand la difficulté monte
     estimQcm: ['libre', 'qcm', 'mixte', 'auto'].indexOf(s.estimQcm) >= 0 ? s.estimQcm : 'auto',
     saisie: ['auto', 'jamais', 'toujours'].indexOf(s.saisie) >= 0 ? s.saisie : 'auto',
-    saisieNiveau: clamp(s.saisieNiveau, 2, 5, 4),   // à partir de quel niveau on tape la réponse
+    // À partir de quelle difficulté il faut taper la réponse. Par défaut 4,5 :
+    // écrire une réponse est bien plus dur que choisir, on le réserve aux questions
+    // les plus difficiles et on laisse un QCM partout ailleurs.
+    saisieNiveau: clamp(s.saisieNiveau, 2, 5, 4.5),
     format: FORMATS.indexOf(s.format) >= 0 ? s.format : 'classique',
     lives: clamp(s.lives, 1, 5, 3),
     teams: clamp(s.teams, 2, 4, 2),
@@ -296,6 +299,7 @@ function rules(st) {
   out.duration = clamp(out.duration, 10, 120, s.duration);
   out.margePct = clamp(out.margePct, 1, 50, s.margePct);
   out.saisieNiveau = clamp(out.saisieNiveau, 2, 5, s.saisieNiveau);
+  if (out.choix !== 'fixes' && out.choix !== 'adaptatifs') out.choix = s.choix;
   if (['simple', 'rapidite', 'series'].indexOf(out.points) < 0) out.points = s.points;
   if (['libre', 'qcm', 'mixte', 'auto'].indexOf(out.estimQcm) < 0) out.estimQcm = s.estimQcm;
   if (['auto', 'jamais', 'toujours'].indexOf(out.saisie) < 0) out.saisie = s.saisie;
@@ -554,6 +558,29 @@ function matchText(donnee, formes) {
   return false;
 }
 
+/**
+ * Les propositions d'un QCM, réduites à ce que la question demande : à
+ * « Quel est ce titre ? », on n'affiche que les titres, pas « Artiste – Titre ».
+ * On ne le fait que si les quatre restent différentes et lisibles, sinon on garde
+ * les propositions entières : mieux vaut long que ambigu.
+ */
+function shortenChoices(q, rep) {
+  const courts = q.choices.map(c => answerTarget(c, q.text));
+  const vus = {};
+  let bon = true;
+  courts.forEach(c => {
+    if (!c || c.length < 2) bon = false;
+    const n = normText(c);
+    if (vus[n]) bon = false;
+    vus[n] = 1;
+  });
+  if (!bon) return false;
+  q.choices = courts;
+  q.answerText = courts[q.secret.correct];
+  q.answerMore = rep;
+  return true;
+}
+
 /** Une réponse est-elle raisonnablement « tapable » ? (ni liste, ni phrase entière) */
 function typable(rep) {
   const r = String(rep || '').trim();
@@ -683,7 +710,9 @@ function loadQuestion(r, st, families) {
     q.answerText = formatNum(q.secret.value, q.unit) + (q.unit ? ' ' + q.unit : '');
     const mode = st ? reg.estimQcm : 'libre';
     // « auto » : on propose 4 nombres tant que c'est facile, puis on demande la valeur exacte
-    const enQcm = mode === 'qcm' || (mode === 'mixte' && Math.random() < 0.5) || (mode === 'auto' && level <= 2);
+    const seuilLibre = st ? reg.saisieNiveau : 4.5;
+    const enQcm = mode === 'qcm' || (mode === 'mixte' && Math.random() < 0.5)
+      || (mode === 'auto' && effDiff(r) < seuilLibre);
     if (!isNaN(q.secret.value) && enQcm) {
       const nums = numericChoices(q.secret.value, level, q.unit);
       q.type = 'QCM';
@@ -714,14 +743,25 @@ function loadQuestion(r, st, families) {
   } else {
     q.type = 'QCM';
     q.answerText = rep;
-    // Difficulté par la forme de la réponse : QCM en facile, clavier en difficile
+    // Ce que la question demande vraiment : « Quel est ce titre ? » attend le titre,
+    // « Qui chante ? » attend l'interprète — pas « Artiste – Titre » en entier.
+    const cible = answerTarget(rep, q.text);
+    const court = cible && cible !== rep;
+    // Écrire une réponse est bien plus dur que la choisir : on ne le demande qu'aux
+    // questions vraiment difficiles (4,5 ★ par défaut), jamais aux faciles.
     const regle = st ? reg.saisie : 'jamais';
-    const seuil = st ? reg.saisieNiveau : 4;
-    const auClavier = typable(rep) && (regle === 'toujours' || (regle === 'auto' && level >= seuil));
+    const seuil = st ? reg.saisieNiveau : 4.5;
+    const auClavier = typable(cible) && (regle === 'toujours' || (regle === 'auto' && effDiff(r) >= seuil));
     if (auClavier) {
       q.type = 'SAISIE';
       q.secret.formes = acceptedForms(rep, q.text);
-      const cible = answerTarget(rep, q.text);
+      if (court) {
+        q.answerText = cible;
+        q.answerMore = rep;
+        // on dit clairement ce qu'on attend : le titre, ou l'interprète, pas les deux
+        q.attente = /\bqui\b|artiste|groupe|chante|interpr|composit/i.test(q.text)
+          ? "l'interprète seulement" : 'le titre seulement';
+      }
       // Échelle de difficulté par la forme : au dernier niveau, plus aucune aide
       if (level < 5) {
         q.lettres = cible.replace(/[^A-Za-zÀ-ÿ0-9]/g, '').length;
@@ -734,6 +774,7 @@ function loadQuestion(r, st, families) {
       if (fam) wrong = adaptiveDistractors(rep, fixed, fam, q.cat, q.epoque, level);
       q.choices = shuffle([rep].concat(wrong.slice(0, 3)));
       q.secret.correct = q.choices.indexOf(rep);
+      if (court) shortenChoices(q, rep);
     }
   }
   return q;
@@ -1015,7 +1056,8 @@ function doReveal(st, players, answers) {
   if (s.format === 'survie' && pids.length >= 2 && alive <= 1) st.finished = true;
 
   st.reveal = {
-    qIndex: st.qIndex, correct: q.secret.correct, answerText: q.answerText, order: q.secret.order || null,
+    qIndex: st.qIndex, correct: q.secret.correct, answerText: q.answerText,
+    answerMore: q.answerMore || '', order: q.secret.order || null,
     dist: dist, rate: rate, nbOk: nbOk, nbPlay: inPlay.length, levelBefore: before, levelAfter: st.level,
     results: results, closest: closest,
     tol: q.type === 'ESTIMATION' && s.estimation === 'marge' ? tol : null,
@@ -1082,7 +1124,7 @@ function publicQuestion(q) {
   return {
     id: q.id, type: q.type, text: q.text, theme: q.theme, cat: q.cat, diff: q.diff,
     choices: q.choices || null, unit: q.unit || '', items: q.items || null, hint: q.hint || '',
-    lettres: q.lettres || null, initiale: q.initiale || '',
+    lettres: q.lettres || null, initiale: q.initiale || '', attente: q.attente || '',
     media: q.media, start: q.start || null, epoque: q.epoque || '', zone: q.zone || null,
     mult: q.mult || 1, gold: !!q.gold,
   };
@@ -1108,6 +1150,8 @@ function publicView(st, players, answers, pid) {
     // chrono : temps mort accumulé et pause en cours, pour que tous les écrans s'accordent
     pausedMs: pausedMs(st), paused: !!(st.current && st.current.pausedAt),
     format: s.format, lives: s.lives, joker: s.joker, finished: !!st.finished,
+    // règles du chapitre en cours, pour que les écrans n'aient pas à les recalculer
+    autoReveal: s.autoReveal, bonus: !!s.bonus,
   };
   if (s.format === 'equipes') v.teams = teamRanking(st, players);
   if (s.format === 'survie') {
@@ -1135,7 +1179,7 @@ function publicView(st, players, answers, pid) {
   if (st.reveal && (st.status === 'REVEAL' || st.status === 'SCORES')) {
     const r = st.reveal;
     v.reveal = {
-      correct: r.correct, answerText: r.answerText, order: r.order, dist: r.dist, rate: r.rate,
+      correct: r.correct, answerText: r.answerText, answerMore: r.answerMore || '', order: r.order, dist: r.dist, rate: r.rate,
       nbOk: r.nbOk, nbPlay: r.nbPlay, levelUp: r.levelAfter > r.levelBefore, closest: r.closest, tol: r.tol,
       expl: st.current ? st.current.expl : '', pins: r.pins, target: r.target, winner: r.winner,
       mult: r.mult, top: r.top, fast: r.fast, eliminated: r.eliminated, repechage: r.repechage, alive: r.alive,
@@ -1173,7 +1217,8 @@ function adminView(st, players, answers) {
   const v = publicView(st, players, answers, null);
   v.settings = st.settings;
   v.current = st.current ? Object.assign({}, publicQuestion(st.current), {
-    answerText: st.current.answerText, expl: st.current.expl, indices: st.current.indices,
+    answerText: st.current.answerText, answerMore: st.current.answerMore || '',
+    expl: st.current.expl, indices: st.current.indices,
     correct: st.current.secret.correct, anecdote: st.current.anecdote || '',
     target: st.current.type === 'CARTE'
       ? { lat: st.current.secret.lat, lon: st.current.secret.lon, full: st.current.secret.full } : null,
@@ -1264,6 +1309,7 @@ const ADMIN_ACTIONS = new Set([
   'adminShuffleTeams', 'adminCatalog', 'adminAddQuestion', 'adminMontages', 'adminSaveMontage',
   'adminDeleteMontage', 'adminLeaderboard', 'adminBlindList',
   'adminPause', 'adminResume', 'adminJudge', 'adminScore',
+  'adminDeleteParty', 'adminRenamePlayer', 'adminDeletePlayer',
 ]);
 
 function createActions(db) {
@@ -1716,11 +1762,23 @@ function createActions(db) {
         return await publish(st, players, await loadAnswers(st.code, st.qIndex));
       }
 
+      /**
+       * Réglage en direct. Ce qui appartient au chapitre en cours (chrono, points,
+       * façon de répondre…) est écrit DANS ce chapitre : sinon la règle du chapitre
+       * continuerait de l'emporter et rien ne changerait à l'écran.
+       */
       case 'adminUpdateSettings': {
         const st = await loadGame(p.code);
         const players = await loadPlayers(st.code);
-        ['visual', 'sounds', 'audioOn', 'autoReveal', 'duration', 'choix', 'estimQcm', 'saisie', 'saisieNiveau'].forEach(k => {
-          if (p.patch && p.patch[k] !== undefined) st.settings[k] = p.patch[k];
+        const patch = p.patch || {};
+        const ch = st.settings.chapters[st.chapIndex];
+        ['visual', 'sounds', 'audioOn'].forEach(k => {
+          if (patch[k] !== undefined) st.settings[k] = patch[k];
+        });
+        REGLES_CHAPITRE.forEach(k => {
+          if (patch[k] === undefined) return;
+          st.settings[k] = patch[k];                       // pour les chapitres suivants
+          if (ch) { ch.regles = ch.regles || {}; ch.regles[k] = patch[k]; }
         });
         st.settings = normalizeSettings(st.settings);
         return await publish(st, players, await loadAnswers(st.code, st.qIndex));
@@ -1792,6 +1850,46 @@ function createActions(db) {
         return { classement: g || [], themes: t || [], parties: parties || [] };
       }
 
+      /**
+       * Ménage dans le classement général. Rien ne part sans que le maître du jeu
+       * ait recopié le code de la partie (ou le pseudo du joueur) : une erreur de
+       * clic ne peut pas effacer une soirée.
+       */
+      case 'adminDeleteParty': {
+        const code = String(p.code || '').trim().toUpperCase();
+        if (!code) throw new Error('Quelle partie faut-il effacer ?');
+        if (String(p.confirme || '').trim().toUpperCase() !== code) {
+          throw new Error('Pour effacer cette partie, recopie son code : ' + code);
+        }
+        const { data: g } = check(await db.from('games').select('*').eq('code', code).maybeSingle());
+        if (g && g.state && g.state.status !== 'END') throw new Error('Cette partie est encore en cours.');
+        check(await db.from('answers').delete().eq('game_code', code));
+        check(await db.from('parties').delete().eq('code', code));
+        return { ok: true, code: code };
+      }
+
+      case 'adminDeletePlayer': {
+        const pseudo = String(p.pseudo || '').trim();
+        if (!pseudo) throw new Error('Quel joueur faut-il effacer ?');
+        if (String(p.confirme || '').trim() !== pseudo) {
+          throw new Error('Pour effacer « ' + pseudo + ' » de l\'historique, recopie son pseudo exactement.');
+        }
+        check(await db.from('answers').delete().eq('pseudo', pseudo));
+        return { ok: true };
+      }
+
+      case 'adminRenamePlayer': {
+        const pseudo = String(p.pseudo || '').trim();
+        const nouveau = cleanPseudo(p.nouveau);
+        if (!pseudo) throw new Error('Quel joueur faut-il renommer ?');
+        if (String(p.confirme || '').trim() !== pseudo) {
+          throw new Error('Pour renommer « ' + pseudo + ' », recopie son pseudo actuel.');
+        }
+        check(await db.from('answers').update({ pseudo: nouveau }).eq('pseudo', pseudo));
+        check(await db.from('parties').update({ vainqueur: nouveau }).eq('vainqueur', pseudo));
+        return { ok: true, pseudo: nouveau };
+      }
+
       /* ---------------- Joueurs ---------------- */
 
       case 'playerJoin': {
@@ -1859,7 +1957,8 @@ function createActions(db) {
         const players = await loadPlayers(st.code);
         const pl = players[pid];
         const q = st.current;
-        if (!pl || !st.settings.joker) return { ok: false, msg: 'Pas de joker dans cette partie.' };
+        // le joker se règle chapitre par chapitre
+        if (!pl || !rules(st).joker) return { ok: false, msg: 'Pas de joker dans ce chapitre.' };
         if (st.status !== 'QUESTION' || st.qIndex !== p.qIndex) return { ok: false, msg: 'Trop tard !' };
         if (q.type !== 'QCM' || !q.choices || q.choices.length < 4) {
           return { ok: false, msg: 'Le joker ne marche que sur un QCM à 4 propositions.' };
@@ -1928,7 +2027,7 @@ function createActions(db) {
 
 
 /** Version du serveur : renvoyée par l'action « time », pour vérifier ce qui est déployé. */
-const BUILD = '2026-09-25-556d83';
+const BUILD = '2026-09-25-5b665c';
 
 const db = createDb(
   Deno.env.get('SUPABASE_URL') ?? '',

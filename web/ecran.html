@@ -6,7 +6,7 @@
 <title>Quizz — écran</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Playfair+Display:wght@600;800&family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=2026-09-25-d">
+<link rel="stylesheet" href="styles.css?v=2026-09-25-e">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   html, body { height: 100%; overflow: hidden; }
@@ -71,8 +71,8 @@
 <div class="stage" id="app"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=2026-09-25-d"></script>
-<script src="commun.js?v=2026-09-25-d"></script>
+<script src="config.js?v=2026-09-25-e"></script>
+<script src="commun.js?v=2026-09-25-e"></script>
 <script>
 /* Sans paramètre, l'écran suit tout seul la dernière partie créée : aucun rechargement entre deux parties. */
 let CODE = (new URLSearchParams(location.search).get('p') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -271,7 +271,7 @@ function render(v) {
     case 'QUESTION': {
       const live = v.status === 'QUESTION';
       let body = '';
-      if (q.type === 'SAISIE') body = `<div class="center muted" style="font-size:1.4em">⌨️ Tapez la réponse exacte sur votre téléphone${q.lettres ? ' · ' + q.lettres + ' lettres' : ''}${q.initiale ? ' · commence par « ' + esc(q.initiale) + ' »' : ''}</div>`;
+      if (q.type === 'SAISIE') body = `<div class="center muted" style="font-size:1.4em">⌨️ Tapez ${q.attente ? esc(q.attente) : 'la réponse'} sur votre téléphone${q.lettres ? ' · ' + q.lettres + ' lettres' : ''}${q.initiale ? ' · commence par « ' + esc(q.initiale) + ' »' : ''}</div>`;
       else if (q.type === 'ESTIMATION') body = `<div class="center muted" style="font-size:1.4em">✍️ Répondez sur votre téléphone${q.unit ? ' (en ' + esc(q.unit) + ')' : ''}</div>`;
       else if (q.type === 'ORDRE') body = `<div class="center muted">${esc(q.hint)}</div><div class="order-list">${q.items.map(it => `<div class="it">${esc(it)}</div>`).join('')}</div>`;
       else if (q.type === 'CARTE') body = `<div id="map" class="qmap"></div>`;
@@ -297,6 +297,9 @@ function render(v) {
           ${r.tol !== null && r.tol !== undefined ? `<div class="center muted">Accepté à ± ${Math.round(r.tol * 100) / 100}</div>` : ''}
           <div class="col" style="max-width:60vw;margin:0 auto;width:100%">${(r.closest || []).map(c =>
             `<div class="rank-row" style="grid-template-columns:2em 1fr auto 4.5em"><span>${c.ok ? '✅' : '❌'}</span><span>${esc(c.pseudo)}</span><b>${esc(c.a)}</b><span class="muted" style="text-align:right;font-size:.8em">${fmtS(c.t)}</span></div>`).join('')}</div>`;
+      } else if (q.type === 'SAISIE') {
+        body = `<div class="big-answer pop-in">${esc(r.answerText)}</div>
+          ${r.answerMore ? `<div class="center muted" style="font-size:1.1em">${esc(r.answerMore)}</div>` : ''}`;
       } else if (q.type === 'ORDRE') {
         body = `<div class="order-list">${r.order.map((it, i) => `<div class="it good pop-in"><b>${i + 1}.</b> ${esc(it)}</div>`).join('')}</div>`;
       } else if (q.type === 'CARTE') {
@@ -325,6 +328,7 @@ function render(v) {
           <div class="q" style="font-size:1.6em">${esc(q.text)}</div>
           ${banner.map(b => `<div class="center pop-in" style="font-family:var(--font-title);font-weight:800;font-size:1.4em;color:var(--accent)">${b}</div>`).join('')}
           ${body}
+          ${r.answerMore && q.type !== 'SAISIE' ? `<div class="center muted">${esc(r.answerMore)}</div>` : ''}
           ${carte ? '' : starHtml(v, r)}
           ${r.expl && !carte ? `<div class="card center fade-in">💡 ${esc(r.expl)}</div>` : ''}</div>
         <div class="row"><span class="pill" style="font-size:1.2em">✅ ${r.nbOk} / ${r.nbPlay !== undefined ? r.nbPlay : v.playerCount} · ${Math.round(r.rate * 100)} %</span>

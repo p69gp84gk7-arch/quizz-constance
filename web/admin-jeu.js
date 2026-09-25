@@ -321,7 +321,8 @@ function mainCard(v) {
     ${banners.map(b => `<div class="hint-box" style="border-style:solid">${b}</div>`).join('')}
     <div class="qbig">${esc(q.text)}</div>
     ${q.hint ? `<div class="muted">Consigne : ${esc(q.hint)}</div>` : ''}
-    <div class="answer-box"><div class="lbl2">Réponse</div><div style="font-size:20px;font-weight:800">${esc(q.answerText)}</div>
+    <div class="answer-box"><div class="lbl2">Réponse${q.attente ? ' — ' + esc(q.attente) : ''}</div><div style="font-size:20px;font-weight:800">${esc(q.answerText)}</div>
+      ${q.answerMore ? `<div class="muted" style="font-size:13px">${esc(q.answerMore)}</div>` : ''}
       ${q.expl ? `<div style="margin-top:6px">💡 ${esc(q.expl)}</div>` : ''}</div>
     ${v.paused ? '<div class="banner" style="border-color:var(--accent)">⏸ Chrono en pause — personne ne peut répondre</div>' : ''}
     ${media}
@@ -463,8 +464,11 @@ function settingsCard(v) {
     <label>Blind test <select id="s-audio" style="width:auto">${Object.keys(AUDIO_OU).map(k =>
       `<option value="${k}" ${s.audioOn === k ? 'selected' : ''}>son ${AUDIO_OU[k]}</option>`).join('')}</select></label>
     <label class="switch"><input type="checkbox" id="s-sounds" ${s.sounds ? 'checked' : ''}> Sons</label>
-    <label class="switch"><input type="checkbox" id="s-auto" ${s.autoReveal ? 'checked' : ''}> Révélation auto</label>
-    <span class="muted">· ${s.duration}s · points : ${{ simple: '1 par bonne réponse', rapidite: 'rapidité', series: 'rapidité + séries' }[s.points]}${s.joker ? ' · 🃏 joker 50/50' : ''}${s.bonus ? ' · ⭐ questions en or' : ''}${s.finale ? ' · 🏁 finale ×3' : ''}</span>
+    <label class="switch"><input type="checkbox" id="s-auto" ${v.autoReveal !== false ? 'checked' : ''}> Révélation auto</label>
+    <label>Chrono <select id="s-duree" style="width:auto">${[10, 15, 20, 25, 30, 45, 60, 90].map(n =>
+      `<option value="${n}" ${n === (v.duration || s.duration) ? 'selected' : ''}>${n} s</option>`).join('')}</select></label>
+    <span class="muted">· ${v.chapter ? 'chapitre ' + v.chapter.idx + ' : ' + esc(v.chapter.name) + ' · ' : ''}points : ${{ simple: '1 par bonne réponse', rapidite: 'rapidité', series: 'rapidité + séries' }[v.points || s.points]}${v.joker ? ' · 🃏 joker 50/50' : ''}${s.finale ? ' · 🏁 finale ×3' : ''}</span>
+    <span class="muted" style="font-size:12px">Ces changements s'appliquent au chapitre en cours.</span>
   </div></details>`;
 }
 
@@ -475,6 +479,7 @@ function bindSettings() {
   on('#s-audio', e => upd({ audioOn: e.target.value }));
   on('#s-sounds', e => upd({ sounds: e.target.checked }));
   on('#s-auto', e => upd({ autoReveal: e.target.checked }));
+  on('#s-duree', e => upd({ duration: Number(e.target.value) }));
 }
 
 /** Le maître du jeu accorde ou retire une bonne réponse après la révélation. */
@@ -542,9 +547,9 @@ setInterval(() => {
   if (!v || v.status !== 'QUESTION' || !v.current) return;
   const rem = Clock.remaining(v.current.start, v.duration || v.settings.duration, v);
   const bar = $('#tbar');
-  if (bar) { bar.firstElementChild.style.width = (100 * rem / v.settings.duration) + '%'; bar.classList.toggle('warn', rem <= 5); $('#tnum').textContent = Math.ceil(rem); }
+  if (bar) { bar.firstElementChild.style.width = (100 * rem / (v.duration || v.settings.duration)) + '%'; bar.classList.toggle('warn', rem <= 5); $('#tnum').textContent = Math.ceil(rem); }
   const allIn = v.players.length > 0 && v.answeredCount >= v.players.length;
-  if (v.settings.autoReveal && (rem <= 0 || allIn) && A.autoRevealFor !== v.qIndex + '|' + v.current.id) {
+  if (v.autoReveal !== false && (rem <= 0 || allIn) && A.autoRevealFor !== v.qIndex + '|' + v.current.id) {
     A.autoRevealFor = v.qIndex + '|' + v.current.id;
     setTimeout(() => { if (A.view.status === 'QUESTION') act('adminReveal'); }, allIn ? 800 : 1600);
   }

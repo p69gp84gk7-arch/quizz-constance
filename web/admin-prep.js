@@ -2,9 +2,38 @@
 
 const ALL_TYPES = ['QCM', 'VF', 'ESTIMATION', 'ORDRE', 'CARTE'];
 
+/**
+ * Les règles qu'un chapitre porte lui-même : chaque chapitre est une mini-partie,
+ * avec son chrono, ses points et sa façon de répondre. La partie, c'est la somme
+ * des chapitres — c'est elle qui donne le classement final.
+ */
+const REGLES_CH = ['duration', 'points', 'estimation', 'margePct', 'choix', 'estimQcm',
+  'saisie', 'saisieNiveau', 'joker', 'bonus', 'autoReveal'];
+
+const REGLES_DEFAUT = {
+  duration: 30, points: 'rapidite', estimation: 'marge', margePct: 10, choix: 'adaptatifs',
+  estimQcm: 'auto', saisie: 'auto', saisieNiveau: 4.5, joker: true, bonus: false, autoReveal: true,
+};
+
+/**
+ * Donne à chaque chapitre ses règles complètes : ce qu'il ne précise pas est
+ * repris des réglages généraux du modèle (ou des valeurs par défaut). Après ça,
+ * chaque chapitre est autonome — changer l'un ne touche plus les autres.
+ */
+function propager(d) {
+  (d.chapters || []).forEach(c => {
+    const r = c.regles || {};
+    c.regles = {};
+    REGLES_CH.forEach(k => {
+      c.regles[k] = r[k] !== undefined && r[k] !== '' ? r[k] : (d[k] !== undefined ? d[k] : REGLES_DEFAUT[k]);
+    });
+  });
+  return d;
+}
+
 function defaultChapter(name, nb, level, extra) {
   const c = Object.assign({ name: name, themes: [], cats: [], eras: [], types: ALL_TYPES.slice(),
-    media: 'tous', nb: nb, level: level, autoName: true }, extra || {});
+    media: 'tous', nb: nb, level: level, autoName: true, regles: {} }, extra || {});
   c.name = chapterAutoName(c) || name;
   return c;
 }
@@ -27,7 +56,6 @@ function chapterAutoName(c) {
   else if (c.eras.length > 1) bouts.push(c.eras.length + ' époques');
 
   if (c.ids && c.ids.length) bouts.push(c.ids.length + ' extraits choisis');
-  if (c.regles && c.regles.duration) bouts.push(c.regles.duration + ' s');
   if (c.dates) bouts.push('📅 Dates');
   if (c.media === 'photo') bouts.push('📸 Photos');
   else if (c.media === 'son') bouts.push('🎧 Extraits');
@@ -46,30 +74,29 @@ function refreshChapterNames(d) {
 }
 
 function defaultDraft() {
-  return {
-    title: 'Quizz', duration: 30, maxPlayers: 15, points: 'rapidite', estimation: 'marge', margePct: 10,
-    chrono: 'auto', autoReveal: true, visual: 'plateau', sounds: true, audioOn: 'ecran', choix: 'adaptatifs',
-    estimQcm: 'auto', saisie: 'auto', saisieNiveau: 4,
-    format: 'classique', lives: 3, teams: 2, bonus: false, finale: false, joker: true,
-    chapters: [defaultChapter('Culture générale', 15, 1)],
-  };
+  const d = Object.assign({
+    title: 'Quizz', maxPlayers: 15, chrono: 'auto', visual: 'plateau', sounds: true, audioOn: 'ecran',
+    format: 'classique', lives: 3, teams: 2, finale: false,
+  }, REGLES_DEFAUT);
+  d.chapters = [defaultChapter('Culture générale', 15, 1)];
+  return propager(d);
 }
-const withFmt = (o, x) => Object.assign(defaultDraft(), x, o);
+const withFmt = (o, x) => propager(Object.assign(defaultDraft(), x, o));
 
 const PRESETS = {
   'Classique · 15 questions': () => defaultDraft(),
-  'Express · 10 questions / 20 s': () => Object.assign(defaultDraft(), { duration: 20, chrono: 'auto', chapters: [defaultChapter('Express', 10, 2)] }),
-  'Soirée en 3 chapitres': () => Object.assign(defaultDraft(), { chapters: [
+  'Express · 10 questions / 20 s': () => propager(Object.assign(defaultDraft(), { duration: 20, chrono: 'auto', chapters: [defaultChapter('Express', 10, 2)] })),
+  'Soirée en 3 chapitres': () => propager(Object.assign(defaultDraft(), { chapters: [
     defaultChapter('Échauffement', 5, 1),
     defaultChapter('Cinéma', 5, 2, { themes: ['Cinéma'] }),
     defaultChapter('Grand final', 5, 3),
-  ] }),
-  'Blind test musique': () => Object.assign(defaultDraft(), { chapters: [defaultChapter('Blind test musique', 10, 1, { themes: ['Blind test musique'] })] }),
-  'Blind test cinéma': () => Object.assign(defaultDraft(), { chapters: [defaultChapter('Blind test cinéma', 10, 1, { themes: ['Blind test cinéma'] })] }),
-  'Soirée blind test': () => Object.assign(defaultDraft(), { chapters: [
+  ] })),
+  'Blind test musique': () => propager(Object.assign(defaultDraft(), { chapters: [defaultChapter('Blind test musique', 10, 1, { themes: ['Blind test musique'] })] })),
+  'Blind test cinéma': () => propager(Object.assign(defaultDraft(), { chapters: [defaultChapter('Blind test cinéma', 10, 1, { themes: ['Blind test cinéma'] })] })),
+  'Soirée blind test': () => propager(Object.assign(defaultDraft(), { chapters: [
     defaultChapter('Blind test musique', 6, 1, { themes: ['Blind test musique'] }),
     defaultChapter('Blind test cinéma', 6, 1, { themes: ['Blind test cinéma'] }),
-  ] }),
+  ] })),
   '⚔️ Face à face': () => withFmt({ format: 'face', points: 'rapidite', duration: 20, chapters: [defaultChapter('Face à face', 16, 2)] }),
   '💀 Survie': () => withFmt({ format: 'survie', lives: 3, duration: 20, chapters: [defaultChapter('Survie', 30, 1)] }),
   '👥 Équipes': () => withFmt({ format: 'equipes', teams: 2, chapters: [
@@ -90,14 +117,13 @@ const PRESETS = {
 
 A.draft = (() => { try { return JSON.parse(store('qc_draft')) || defaultDraft(); } catch (e) { return defaultDraft(); } })();
 A.draft.chrono = 'auto'; // ancien réglage « chrono manuel » supprimé
-A.draft.choix = A.draft.choix || 'adaptatifs';
-A.draft.estimQcm = A.draft.estimQcm || 'auto';
-A.draft.saisie = A.draft.saisie || 'auto';
-A.draft.saisieNiveau = A.draft.saisieNiveau || 4;
+REGLES_CH.forEach(k => { if (A.draft[k] === undefined) A.draft[k] = REGLES_DEFAUT[k]; });
 A.draft.chapters.forEach(c => {
   c.eras = c.eras || [];
   if (c.types && c.types.length === 4 && c.types.indexOf('CARTE') < 0) c.types = ALL_TYPES.slice(); // ancien brouillon « tous les types »
 });
+// Ancien brouillon : les réglages étaient au-dessus, ils descendent dans les chapitres
+propager(A.draft);
 ['format', 'lives', 'teams', 'bonus', 'finale', 'joker'].forEach(k => { if (A.draft[k] === undefined) A.draft[k] = defaultDraft()[k]; });
 function saveDraft() { store('qc_draft', JSON.stringify(A.draft)); }
 
@@ -134,14 +160,16 @@ function renderPreparer() {
 
   root.innerHTML = `
   <div class="col">
-    <div class="card row">
-      <b>Modèles :</b>
-      ${Object.keys(PRESETS).map(p => `<button class="btn small" data-preset="${esc(p)}">${esc(p)}</button>`).join('')}
-      <span class="spacer"></span>
-      <select id="mont" style="width:auto"><option value="">— Mes montages (${A.montages.length}) —</option>${A.montages.map((m, i) => `<option value="${i}">${esc(m.name)}</option>`).join('')}</select>
-      <button class="btn small" id="montLoad">Charger</button>
-      <button class="btn small" id="montDel">Supprimer</button>
-      <button class="btn small" id="montSave">💾 Enregistrer ce montage</button>
+    <div class="card col">
+      <div class="row"><b>Modèles :</b>
+        ${Object.keys(PRESETS).map(p => `<button class="btn small" data-preset="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+      <div class="row"><b>Mes montages :</b>
+        ${A.montages.length
+          ? A.montages.map((m, i) => `<span class="mont"><button class="btn small" data-mont="${i}" title="${esc(m.desc || '')}">💾 ${esc(m.name)}</button><button class="btn small mont-x" data-montdel="${i}" title="Supprimer ce montage">✕</button></span>`).join('')
+          : '<span class="muted">aucun pour l\'instant</span>'}
+        <span class="spacer"></span>
+        <button class="btn small" id="montSave">💾 Enregistrer ce montage</button>
+      </div>
     </div>
 
     ${yearsCard()}
@@ -160,32 +188,19 @@ function renderPreparer() {
     </div>
 
     <div class="card col">
-      <h2>⚙️ Réglages de la partie</h2>
+      <h2>⚙️ La partie</h2>
+      <p class="muted" style="margin:0;font-size:13px">Ici, ce qui vaut pour toute la soirée.
+        <b>Le chrono, les points et la façon de répondre se règlent chapitre par chapitre</b> : chaque chapitre
+        est une petite partie avec ses propres règles, et le classement final additionne tout.</p>
       <div class="grid2">
         <div><label class="lbl">Titre affiché</label><input type="text" data-k="title" value="${esc(d.title)}"></div>
-        <div><label class="lbl">Temps par question (s)</label><input type="number" min="10" max="120" data-k="duration" value="${d.duration}"></div>
         <div><label class="lbl">Joueurs maximum (2 à 15)</label><input type="number" min="2" max="15" data-k="maxPlayers" value="${d.maxPlayers}"></div>
-        <div><label class="lbl">Système de points</label><select data-k="points">
-          ${opt('rapidite', d.points, 'Points + bonus de rapidité')}${opt('series', d.points, 'Rapidité + bonus de séries')}${opt('simple', d.points, '1 point par bonne réponse')}</select></div>
-        <div><label class="lbl">Questions d'estimation</label><select data-k="estimation" data-rerender>
-          ${opt('marge', d.estimation, 'Juste si dans la marge')}${opt('proche', d.estimation, 'Seul le plus proche gagne')}</select></div>
-        ${d.estimation === 'marge' ? `<div><label class="lbl">Marge par défaut (%)</label><input type="number" min="1" max="50" data-k="margePct" value="${d.margePct}"></div>` : ''}
-        <div><label class="lbl">Propositions de réponse</label><select data-k="choix">
-          ${opt('adaptatifs', d.choix, 'Tirées au sort selon la difficulté')}${opt('fixes', d.choix, 'Toujours celles du Sheet')}</select></div>
-        <div><label class="lbl">Estimations (années, nombres…)</label><select data-k="estimQcm">
-          ${opt('auto', d.estimQcm, 'Selon la difficulté : QCM puis valeur exacte')}${opt('mixte', d.estimQcm, 'Mélange : libre ou QCM')}${opt('qcm', d.estimQcm, 'Toujours en QCM')}${opt('libre', d.estimQcm, 'Toujours en réponse libre')}</select></div>
-        <div><label class="lbl">Réponse tapée au clavier</label><select data-k="saisie">
-          ${opt('auto', d.saisie, 'Selon la difficulté (recommandé)')}${opt('jamais', d.saisie, 'Jamais : toujours 4 propositions')}${opt('toujours', d.saisie, 'Toujours taper la réponse')}</select>
-          <div class="muted" style="font-size:12px">En mode automatique, les propositions disparaissent à partir du niveau
-            <select data-k="saisieNiveau" style="width:auto;display:inline-block">${[2, 3, 4, 5].map(n => `<option value="${n}" ${d.saisieNiveau == n ? 'selected' : ''}>${'★'.repeat(n)}</option>`).join('')}</select>
-            : il faut alors écrire la réponse. Les accents et une faute de frappe sont pardonnés.</div></div>
-        <div><label class="lbl">Son du blind test</label><select data-k="audioOn">
+        <div><label class="lbl">Ambiance</label><select data-k="visual">${Object.keys(VISUALS).map(k => opt(k, d.visual, VISUALS[k])).join('')}</select></div>
+        <div><label class="lbl">Son du blind test</label><select data-k="audioOn" data-rerender>
           ${opt('ecran', d.audioOn, 'Sur l\'écran public')}${opt('admin', d.audioOn, 'Sur mon appareil')}${opt('joueurs', d.audioOn, 'Sur les téléphones des joueurs')}${opt('tous', d.audioOn, 'Partout à la fois')}</select>
           ${d.audioOn === 'joueurs' || d.audioOn === 'tous' ? '<div class="muted" style="font-size:12px">Chaque joueur devra toucher « 🔊 Activer le son » en arrivant : les téléphones interdisent de lancer un son sans geste de leur part. Prévenez-les d\'utiliser des écouteurs, sinon les extraits se chevauchent d\'un téléphone à l\'autre.</div>' : ''}</div>
-        <div><label class="lbl">Ambiance</label><select data-k="visual">${Object.keys(VISUALS).map(k => opt(k, d.visual, VISUALS[k])).join('')}</select></div>
         <div class="col" style="gap:6px;justify-content:flex-end">
           <label class="switch"><input type="checkbox" data-k="sounds" ${d.sounds ? 'checked' : ''}> Sons (bonne/mauvaise réponse)</label>
-          <label class="switch"><input type="checkbox" data-k="autoReveal" ${d.autoReveal ? 'checked' : ''}> Révéler à la fin du chrono</label>
         </div>
       </div>
       <h3 style="margin:8px 0 0">🎮 Format de jeu</h3>
@@ -196,9 +211,7 @@ function renderPreparer() {
         ${d.format === 'survie' ? `<div><label class="lbl">Vies par joueur</label><select data-k="lives">${[1, 2, 3, 4, 5].map(n => opt(n, d.lives, '❤️'.repeat(n))).join('')}</select></div>` : ''}
         ${d.format === 'equipes' ? `<div><label class="lbl">Nombre d'équipes</label><select data-k="teams">${[2, 3, 4].map(n => opt(n, d.teams, n + ' équipes')).join('')}</select></div>` : ''}
         <div class="col" style="gap:6px;justify-content:flex-end">
-          <label class="switch"><input type="checkbox" data-k="joker" ${d.joker ? 'checked' : ''}> 🃏 Un joker 50/50 par joueur</label>
-          <label class="switch"><input type="checkbox" data-k="bonus" ${d.bonus ? 'checked' : ''}> ⭐ Questions en or (×2) au hasard</label>
-          <label class="switch"><input type="checkbox" data-k="finale" ${d.finale ? 'checked' : ''}> 🏁 Dernière question ×3</label>
+          <label class="switch"><input type="checkbox" data-k="finale" ${d.finale ? 'checked' : ''}> 🏁 Dernière question de la partie ×3</label>
         </div>
       </div>
       <p class="muted" style="margin:0;font-size:13px">${{
@@ -275,34 +288,55 @@ function chapterCard(c, i) {
 }
 
 /**
- * Règles propres au chapitre. Tout ce qui reste sur « comme la partie » suit les
- * réglages généraux : le maître du jeu ne remplit que ce qu'il veut changer.
+ * Les règles de CE chapitre. Chaque chapitre est une petite partie : il a son
+ * chrono, ses points, sa façon de répondre. Un nouveau chapitre reprend les
+ * règles du précédent — à changer ensuite si on veut une manche différente.
  */
+const LIB_POINTS = { rapidite: 'rapidité', series: 'rapidité + séries', simple: '1 point' };
+const LIB_SAISIE = { auto: 'selon la difficulté', jamais: 'jamais (toujours 4 propositions)', toujours: 'toujours au clavier' };
+const LIB_NIVEAU = { 3: '★★★', 4: '★★★★', 4.5: '★★★★ et demie', 5: '★★★★★' };
+
+/** Une ligne de résumé, pour lire les règles sans ouvrir le bloc. */
+function resumeRegles(r) {
+  const bouts = [r.duration + ' s', LIB_POINTS[r.points] || r.points];
+  if (r.saisie === 'jamais') bouts.push('que des QCM');
+  else if (r.saisie === 'toujours') bouts.push('réponses au clavier');
+  else bouts.push('clavier à partir de ' + (LIB_NIVEAU[r.saisieNiveau] || r.saisieNiveau));
+  if (r.joker) bouts.push('🃏 joker');
+  if (r.bonus) bouts.push('⭐ questions en or');
+  if (!r.autoReveal) bouts.push('révélation à la main');
+  return bouts.join(' · ');
+}
+
 function reglesChapitre(c, i) {
   const r = c.regles || {};
-  const n = Object.keys(r).length;
   const sel = (cle, libelles) => `<select data-cr="${cle}" style="width:auto">
-    <option value="">comme la partie</option>
     ${Object.keys(libelles).map(k => {
       const val = typeof r[cle] === 'boolean' ? (r[cle] ? 'oui' : 'non') : String(r[cle]);
       return `<option value="${k}" ${val === k ? 'selected' : ''}>${libelles[k]}</option>`;
     }).join('')}</select>`;
   const durees = {};
   [10, 15, 20, 25, 30, 45, 60, 90].forEach(d => { durees[d] = d + ' s'; });
-  const niveaux = { 2: '★★', 3: '★★★', 4: '★★★★', 5: '★★★★★' };
-  return `<details class="settings-card" ${n ? 'open' : ''}>
-    <summary class="lbl" style="cursor:pointer">⚙️ Règles de ce chapitre${n ? ` <span class="pill accent">${n} réglage${n > 1 ? 's' : ''}</span>` : ' <span class="muted">(identiques à la partie)</span>'}</summary>
+  return `<details class="settings-card" data-reg ${c.ouvert ? 'open' : ''}>
+    <summary class="lbl" style="cursor:pointer">⚙️ Règles de ce chapitre — <span class="muted" style="font-weight:400">${esc(resumeRegles(r))}</span></summary>
     <div class="grid2" style="margin-top:8px">
-      <label>Chrono ${sel('duration', durees)}</label>
-      <label>Points ${sel('points', { simple: '1 point', rapidite: 'rapidité', series: 'séries' })}</label>
-      <label>Réponse tapée ${sel('saisie', { auto: 'selon la difficulté', jamais: 'jamais', toujours: 'toujours' })}</label>
-      <label>À partir du niveau ${sel('saisieNiveau', niveaux)}</label>
-      <label>Estimations ${sel('estimQcm', { auto: 'selon la difficulté', mixte: 'mélange', qcm: 'en QCM', libre: 'réponse libre' })}</label>
+      <label>Temps par question ${sel('duration', durees)}</label>
+      <label>Points ${sel('points', LIB_POINTS)}</label>
+      <label>Réponse tapée ${sel('saisie', LIB_SAISIE)}</label>
+      <label>… à partir de ${sel('saisieNiveau', LIB_NIVEAU)}</label>
+      <label>Propositions ${sel('choix', { adaptatifs: 'tirées au sort selon la difficulté', fixes: 'toujours celles de la banque' })}</label>
+      <label>Estimations ${sel('estimQcm', { auto: 'QCM, puis valeur exacte si dur', mixte: 'mélange', qcm: 'toujours en QCM', libre: 'toujours en réponse libre' })}</label>
+      <label>Estimation juste ${sel('estimation', { marge: 'si dans la marge', proche: 'le plus proche gagne' })}</label>
+      <label>Marge <input type="number" min="1" max="50" data-cn="margePct" value="${r.margePct}" style="width:70px"> %</label>
       <label>Joker 50/50 ${sel('joker', { oui: 'autorisé', non: 'interdit' })}</label>
-      <label>Questions en or ${sel('bonus', { oui: 'oui', non: 'non' })}</label>
-      <label>Révélation ${sel('autoReveal', { oui: 'automatique', non: 'à la main' })}</label>
+      <label>Questions en or ${sel('bonus', { oui: 'oui (×2 au hasard)', non: 'non' })}</label>
+      <label>Révélation ${sel('autoReveal', { oui: 'à la fin du chrono', non: 'quand je le décide' })}</label>
     </div>
-    ${n ? `<div class="row"><button class="btn small" data-creset>↺ Tout remettre comme la partie</button></div>` : ''}
+    <div class="row" style="margin-top:6px">
+      <button class="btn small" data-ccopy>📋 Ces règles pour tous les chapitres</button>
+      <button class="btn small" data-creset>↺ Règles conseillées</button>
+      <span class="muted" style="font-size:12px">Écrire une réponse est bien plus dur que la choisir : c'est réservé aux questions à partir de ★★★★ et demie.</span>
+    </div>
   </details>`;
 }
 
@@ -345,16 +379,27 @@ function bindPreparer() {
     if (dt) dt.onclick = () => { c.dates = !c.dates; rerender(); };
     card.querySelectorAll('[data-cr]').forEach(el => el.onchange = () => {
       const k = el.dataset.cr;
-      c.regles = c.regles || {};
       const v = el.value;
-      if (v === '') delete c.regles[k];
-      else if (k === 'joker' || k === 'bonus' || k === 'autoReveal') c.regles[k] = v === 'oui';
+      if (k === 'joker' || k === 'bonus' || k === 'autoReveal') c.regles[k] = v === 'oui';
       else if (k === 'duration' || k === 'saisieNiveau') c.regles[k] = Number(v);
       else c.regles[k] = v;
       rerender();
     });
+    card.querySelectorAll('[data-cn]').forEach(el => el.oninput = () => {
+      c.regles[el.dataset.cn] = Number(el.value);
+      saveDraft();
+    });
+    // le bloc reste ouvert d'un rendu à l'autre
+    const det = card.querySelector('[data-reg]');
+    if (det) det.ontoggle = () => { c.ouvert = det.open; saveDraft(); };
+    const cc = card.querySelector('[data-ccopy]');
+    if (cc) cc.onclick = () => {
+      d.chapters.forEach(o => { o.regles = JSON.parse(JSON.stringify(c.regles)); });
+      rerender();
+      toast('Règles recopiées dans les ' + d.chapters.length + ' chapitres ✔');
+    };
     const cz = card.querySelector('[data-creset]');
-    if (cz) cz.onclick = () => { c.regles = {}; rerender(); };
+    if (cz) cz.onclick = () => { c.regles = Object.assign({}, REGLES_DEFAUT); rerender(); };
     const an = card.querySelector('[data-autoname]');
     if (an) an.onclick = () => { c.autoName = true; rerender(); };
     const ex = card.querySelector('[data-extraits]');
@@ -379,7 +424,12 @@ function bindPreparer() {
 
   bindYears(rerender);
 
-  $('#addCh').onclick = () => { d.chapters.push(defaultChapter('Chapitre ' + (d.chapters.length + 1), 5, 1)); rerender(); };
+  $('#addCh').onclick = () => {
+    const prec = d.chapters[d.chapters.length - 1];
+    const regles = JSON.parse(JSON.stringify((prec && prec.regles) || REGLES_DEFAUT));
+    d.chapters.push(defaultChapter('Chapitre ' + (d.chapters.length + 1), 5, 1, { regles: regles, ouvert: true }));
+    rerender();
+  };
 
   root.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => {
     const keepVisual = d.visual;
@@ -388,19 +438,18 @@ function bindPreparer() {
     rerender();
   });
 
-  $('#montLoad').onclick = () => {
-    const i = $('#mont').value;
-    if (i === '') return toast('Choisis un montage.', true);
-    A.draft = JSON.parse(JSON.stringify(A.montages[i].settings));
+  root.querySelectorAll('[data-mont]').forEach(b => b.onclick = () => {
+    const m = A.montages[b.dataset.mont];
+    A.draft = propager(JSON.parse(JSON.stringify(m.settings)));
     applyVisual(A.draft.visual);
     rerender();
-    toast('Montage « ' + A.montages[i].name + ' » chargé');
-  };
-  $('#montDel').onclick = () => {
-    const i = $('#mont').value;
-    if (i === '' || !confirm('Supprimer le montage « ' + A.montages[i].name + ' » ?')) return;
-    rpc('adminDeleteMontage', { nom: A.montages[i].name }).then(reloadMontages).then(renderPreparer).catch(e => toast(e, true));
-  };
+    toast('Montage « ' + m.name + ' » chargé');
+  });
+  root.querySelectorAll('[data-montdel]').forEach(b => b.onclick = () => {
+    const m = A.montages[b.dataset.montdel];
+    if (!confirm('Supprimer le montage « ' + m.name + ' » ?')) return;
+    rpc('adminDeleteMontage', { nom: m.name }).then(reloadMontages).then(renderPreparer).catch(e => toast(e, true));
+  });
   $('#montSave').onclick = () => {
     const name = prompt('Nom du montage :', d.title);
     if (!name) return;
@@ -541,14 +590,17 @@ function randomQuiz() {
       return ch;
     });
   }
-  A.draft = Object.assign(defaultDraft(), keep, { chapters: chapters });
+  A.draft = propager(Object.assign(defaultDraft(), keep, { chapters: chapters }));
 }
 
 function keepSettings() {
   const d = A.draft;
   const k = {};
-  ['title', 'visual', 'duration', 'maxPlayers', 'points', 'sounds', 'audioOn', 'choix', 'estimQcm', 'saisie', 'saisieNiveau', 'format', 'lives', 'teams', 'bonus', 'finale', 'joker', 'estimation', 'margePct', 'autoReveal']
-    .forEach(x => { k[x] = d[x]; });
+  ['title', 'visual', 'maxPlayers', 'sounds', 'audioOn', 'format', 'lives', 'teams', 'finale']
+    .concat(REGLES_CH).forEach(x => { k[x] = d[x]; });
+  // et les règles du premier chapitre servent de modèle aux chapitres générés
+  const r = (d.chapters[0] || {}).regles || {};
+  REGLES_CH.forEach(x => { if (r[x] !== undefined) k[x] = r[x]; });
   return k;
 }
 
@@ -630,7 +682,7 @@ function yearsQuiz() {
     chapters = eras.map((e, i) => defaultChapter('⏳ ' + e, ns[i], 1 + Math.floor(i * 3 / eras.length), { eras: [e], themes: y.themes.slice(), dates: y.dates }));
   }
   const short = chapters.filter(c => available(c) < c.nb);
-  A.draft = Object.assign(defaultDraft(), keepSettings(), { title: 'Quizz · ' + label(eras), chapters: chapters });
+  A.draft = propager(Object.assign(defaultDraft(), keepSettings(), { title: 'Quizz · ' + label(eras), chapters: chapters }));
   if (short.length) toast('⚠ Pas assez de questions pour : ' + short.map(c => c.name).join(', ') + '. Réduis le nombre de questions ou ajoute des thèmes.', true);
   return true;
 }
@@ -757,7 +809,8 @@ A.lb = null; A.lbSort = { k: 'points', dir: -1 }; A.lbTheme = '';
 function renderClassement() {
   const root = $('#tab-classement');
   root.innerHTML = '<div class="card">Chargement du classement…</div>';
-  rpc('adminLeaderboard', {}).then(r => { A.lb = shapeLeaderboard(r); drawClassement(); }).catch(e => { root.innerHTML = ''; toast(e, true); });
+  rpc('adminLeaderboard', {}).then(r => { A.lb = shapeLeaderboard(r); A.parties = r.parties || []; drawClassement(); })
+    .catch(e => { root.innerHTML = ''; toast(e, true); });
 }
 
 /** Met les deux vues SQL (classement général, détail par thème) dans la forme attendue par le tableau. */
@@ -803,8 +856,10 @@ function drawClassement() {
       <td>${['🥇', '🥈', '🥉'][i] || i + 1}</td><td><b>${esc(p.pseudo)}</b></td><td class="num">${p.games}</td><td class="num">${p.wins}</td>
       <td class="num"><b>${p.points}</b></td><td class="num">${p.good}</td><td class="num">${p.n}</td><td class="num">${p.pct} %</td>
       <td class="num">${p.best}</td><td class="num">${p.avgTime === null ? '–' : p.avgTime + ' s'}</td><td>${esc(p.last)}</td></tr>`).join('')}</tbody></table></div>
-    <p class="muted" style="font-size:13px">Clique sur un joueur pour voir le détail de ses points par thème. Le classement se met à jour tout seul à la fin de chaque partie.</p>
-  </div>`;
+    <p class="muted" style="font-size:13px">Clique sur un joueur pour voir son détail par thème, le renommer ou l'effacer.
+      Le classement se met à jour tout seul à la fin de chaque partie.</p>
+  </div>
+  ${partiesCard()}`;
   $('#lbTheme').onchange = e => { A.lbTheme = e.target.value; drawClassement(); };
   document.querySelectorAll('#tab-classement th[data-k]').forEach(th => th.onclick = () => {
     const nk = th.dataset.k;
@@ -813,6 +868,65 @@ function drawClassement() {
     drawClassement();
   });
   document.querySelectorAll('#tab-classement tr[data-p]').forEach(tr => tr.onclick = () => playerDetail(tr.dataset.p));
+  document.querySelectorAll('#tab-classement [data-effacer]').forEach(b => b.onclick = () => effacerPartie(b.dataset.effacer));
+}
+
+/** L'historique des parties : c'est ici qu'on efface une partie de test. */
+function partiesCard() {
+  const ps = A.parties || [];
+  if (!ps.length) return '';
+  const date = d => (d ? String(d).slice(0, 16).replace('T', ' à ').split('-').reverse().join('/').replace(/^(\d\d)\/(\d\d)\/(\d{4})/, '$1/$2/$3') : '');
+  return `<div class="card col">
+    <div class="row"><h2 style="margin:0">📜 Parties jouées</h2><span class="spacer"></span>
+      <span class="muted" style="font-size:13px">Effacer une partie retire ses points du classement général. Les questions, elles, ne sont pas touchées.</span></div>
+    <div style="overflow:auto"><table class="tbl"><thead><tr><th>Code</th><th>Date</th><th>Chapitres</th>
+      <th class="num">Questions</th><th class="num">Joueurs</th><th>Vainqueur</th><th class="num">Score</th><th></th></tr></thead>
+    <tbody>${ps.map(x => `<tr><td><b>${esc(x.code)}</b></td><td>${esc(String(x.jouee_le || '').slice(0, 10).split('-').reverse().join('/'))}</td>
+      <td style="max-width:280px;font-size:13px">${esc(x.chapitres || '')}</td><td class="num">${x.nb_questions || 0}</td>
+      <td class="num">${x.nb_joueurs || 0}</td><td>${esc(x.vainqueur || '')}</td><td class="num">${x.score || 0}</td>
+      <td><button class="btn small" data-effacer="${esc(x.code)}" title="Effacer cette partie du classement">🗑</button></td></tr>`).join('')}</tbody></table></div>
+  </div>`;
+}
+
+/** Demande de recopier le code de la partie : impossible d'effacer une soirée par erreur. */
+function effacerPartie(code) {
+  const m = modal(`<h2>🗑 Effacer la partie ${esc(code)}</h2>
+    <p>Ses points disparaîtront du classement général. C'est ce qu'il faut faire pour une partie de test.
+      <b>Les questions et les explications ne sont pas touchées.</b></p>
+    <div><label class="lbl">Recopie le code de la partie pour confirmer</label>
+      <input type="text" id="cf" placeholder="${esc(code)}" autocomplete="off" style="text-transform:uppercase"></div>
+    <div class="actions"><button class="btn" id="non">Annuler</button>
+      <button class="btn danger" id="oui">Effacer définitivement</button></div>`);
+  m.querySelector('#non').onclick = () => m.remove();
+  m.querySelector('#oui').onclick = () => {
+    const v = m.querySelector('#cf').value;
+    rpc('adminDeleteParty', { code: code, confirme: v })
+      .then(() => { m.remove(); toast('Partie ' + code + ' effacée du classement ✔'); renderClassement(); })
+      .catch(e => toast(e, true));
+  };
+  setTimeout(() => m.querySelector('#cf').focus(), 50);
+}
+
+/** Renommer ou effacer un joueur dans tout l'historique. */
+function editerJoueur(pseudo) {
+  const m = modal(`<h2>✏️ ${esc(pseudo)}</h2>
+    <p class="muted" style="margin:0">Le pseudo est corrigé dans toutes les parties, ou le joueur disparaît du classement.
+      Recopie son pseudo pour confirmer — c'est la sécurité.</p>
+    <div class="grid2">
+      <div><label class="lbl">Nouveau pseudo</label><input type="text" id="nv" value="${esc(pseudo)}" autocomplete="off"></div>
+      <div><label class="lbl">Recopie « ${esc(pseudo)} »</label><input type="text" id="cf" autocomplete="off"></div>
+    </div>
+    <div class="actions"><button class="btn" id="non">Annuler</button>
+      <span class="spacer"></span>
+      <button class="btn danger" id="del">🗑 Effacer ce joueur</button>
+      <button class="btn primary" id="ok">Renommer</button></div>`);
+  m.querySelector('#non').onclick = () => m.remove();
+  const conf = () => m.querySelector('#cf').value;
+  m.querySelector('#ok').onclick = () => rpc('adminRenamePlayer', { pseudo: pseudo, nouveau: m.querySelector('#nv').value, confirme: conf() })
+    .then(r => { m.remove(); toast('Renommé en « ' + r.pseudo + ' » ✔'); renderClassement(); }).catch(e => toast(e, true));
+  m.querySelector('#del').onclick = () => rpc('adminDeletePlayer', { pseudo: pseudo, confirme: conf() })
+    .then(() => { m.remove(); toast('« ' + pseudo + ' » effacé du classement ✔'); renderClassement(); }).catch(e => toast(e, true));
+  setTimeout(() => m.querySelector('#cf').focus(), 50);
 }
 
 function playerDetail(pseudo) {
@@ -820,11 +934,12 @@ function playerDetail(pseudo) {
   if (!p) return;
   const ths = Object.keys(p.themes).sort((a, b) => p.themes[b].points - p.themes[a].points);
   const max = Math.max.apply(null, ths.map(t => p.themes[t].points).concat([1]));
-  modal(`<h2>👤 ${esc(p.pseudo)}</h2>
+  const m = modal(`<h2>👤 ${esc(p.pseudo)} <button class="btn small" id="edit">✏️ Modifier</button></h2>
     <div class="row"><span class="pill">${p.rank}<sup>e</sup> au général</span><span class="pill">${p.games} partie${p.games > 1 ? 's' : ''}</span><span class="pill">${p.wins} victoire${p.wins > 1 ? 's' : ''}</span><span class="pill">${p.points} pts</span><span class="pill">${p.pct} % de réussite</span></div>
     <h3>Points par thème</h3>
     <table class="tbl"><thead><tr><th>Thème</th><th class="num">Points</th><th class="num">Bonnes</th><th class="num">%</th><th style="width:35%"></th></tr></thead><tbody>
     ${ths.map(t => { const x = p.themes[t]; return `<tr><td>${esc(t)}</td><td class="num"><b>${x.points}</b></td><td class="num">${x.good}/${x.n}</td>
       <td class="num">${x.n ? Math.round(100 * x.good / x.n) : 0} %</td><td><div class="mini-bar" style="width:${100 * x.points / max}%"></div></td></tr>`; }).join('')}
     </tbody></table>`);
+  m.querySelector('#edit').onclick = () => { m.remove(); editerJoueur(p.pseudo); };
 }

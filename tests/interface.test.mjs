@@ -305,11 +305,29 @@ console.log('\n3. L\'interface du maître du jeu');
   selPts.value = 'simple'; selPts.onchange();
   await wait(60);
   ok(M.win.eval('A.draft.chapters[0].regles.points') === 'simple', 'et ses points passent en mode simple');
-  ok(/15 s/.test(M.win.eval('A.draft.chapters[0].name')), 'le titre du chapitre le rappelle');
+  ok(/15 s/.test(M.txt()), 'le résumé des règles du chapitre le rappelle');
+
+  // un nouveau chapitre reprend les règles du précédent : chaque chapitre est une mini-partie
+  M.$('#addCh').click();
+  await wait(60);
+  ok(M.win.eval('A.draft.chapters[1].regles.duration') === 15 && M.win.eval('A.draft.chapters[1].regles.points') === 'simple',
+    'le chapitre ajouté hérite des règles du précédent');
+  M.doc.querySelectorAll('[data-cr="duration"]')[1].value = '45';
+  M.doc.querySelectorAll('[data-cr="duration"]')[1].onchange();
+  await wait(60);
+  ok(M.win.eval('A.draft.chapters[0].regles.duration') === 15 && M.win.eval('A.draft.chapters[1].regles.duration') === 45,
+    'chaque chapitre garde son propre chrono');
+  M.doc.querySelectorAll('[data-ccopy]')[1].click();
+  await wait(60);
+  ok(M.win.eval('A.draft.chapters[0].regles.duration') === 45, '« ces règles pour tous les chapitres » recopie partout');
+  M.doc.querySelectorAll('[data-del]')[1].click();
+  await wait(60);
   M.doc.querySelector('[data-creset]').click();
   await wait(60);
-  ok(Object.keys(JSON.parse(M.win.eval('JSON.stringify(A.draft.chapters[0].regles)'))).length === 0,
-    '« tout remettre comme la partie » efface les règles particulières');
+  ok(M.win.eval('A.draft.chapters[0].regles.duration') === 30 && M.win.eval('A.draft.chapters[0].regles.saisieNiveau') === 4.5,
+    '« règles conseillées » remet 30 s et le clavier à partir de ★★★★ et demie');
+  ok(M.win.eval('A.draft.chapters.length') === 1, 'et il ne reste qu\'un chapitre');
+  ok(!/Temps par question \(s\)/.test(M.txt()), 'le chrono n\'est plus dans les réglages généraux, seulement dans les chapitres');
 
   M.doc.querySelector('[data-extraits]').click();
   await wait(200);

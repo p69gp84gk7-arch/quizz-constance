@@ -329,6 +329,51 @@ console.log('\n5. Chapitres et bascule de l\'écran');
   ok(scr.code === mj2.code && scr.code !== code, 'une nouvelle partie fait basculer l\'écran public tout seul');
 }
 
+/* ================= 5 bis. Ménage dans le classement général ================= */
+console.log('\n5 bis. Effacer une partie de test, renommer un joueur');
+{
+  const { db, handle } = fresh();
+  // deux parties déjà jouées, dont une de test
+  db.seed('parties', [
+    { code: 'VRAI', jouee_le: '2026-09-20T20:00:00Z', vainqueur: 'Constance', nb_joueurs: 4 },
+    { code: 'TEST', jouee_le: '2026-09-21T20:00:00Z', vainqueur: 'moi', nb_joueurs: 1 },
+  ]);
+  db.seed('answers', [
+    { game_code: 'VRAI', pid: PIDS[0], pseudo: 'Constance', q_index: 0, correct: true, points: 100, theme: 'Cinéma', temps: 3 },
+    { game_code: 'TEST', pid: PIDS[1], pseudo: 'moi', q_index: 0, correct: true, points: 900, theme: 'Cinéma', temps: 1 },
+  ]);
+  const classement = async () => (await handle('adminLeaderboard', {})).classement;
+  ok((await classement()).length === 2, 'deux joueurs au classement, dont la partie de test');
+
+  let refus = '';
+  try { await handle('adminDeleteParty', { code: 'TEST', confirme: 'tset' }); } catch (e) { refus = e.message; }
+  ok(/recopie son code/i.test(refus), 'sans le bon code recopié, rien n\'est effacé');
+  ok(db.rows('answers').length === 2, 'les réponses sont toujours là');
+
+  await handle('adminDeleteParty', { code: 'test', confirme: ' test ' });
+  const apres = await classement();
+  ok(apres.length === 1 && apres[0].pseudo === 'Constance', 'la partie de test a disparu du classement');
+  ok(db.rows('parties').length === 1, 'et de l\'historique des parties');
+  ok(db.rows('questions').length > 1000, 'les questions, elles, sont intactes');
+
+  // une partie en cours ne peut pas être effacée par mégarde
+  const mj = await handle('adminCreateGame', { settings: { chapters: [{ nb: 3, level: 1 }] } });
+  let vivante = '';
+  try { await handle('adminDeleteParty', { code: mj.code, confirme: mj.code }); } catch (e) { vivante = e.message; }
+  ok(/encore en cours/.test(vivante), 'refus d\'effacer la partie en cours');
+
+  // renommer
+  await handle('adminRenamePlayer', { pseudo: 'Constance', nouveau: 'Constance B.', confirme: 'Constance' });
+  const r = await classement();
+  ok(r.length === 1 && r[0].pseudo === 'Constance B.', 'le joueur est renommé dans tout l\'historique');
+  ok(db.rows('parties')[0].vainqueur === 'Constance B.', 'y compris au palmarès des parties');
+  ok(r[0].victoires === 1, 'sa victoire le suit');
+
+  // effacer un joueur
+  await handle('adminDeletePlayer', { pseudo: 'Constance B.', confirme: 'Constance B.' });
+  ok((await classement()).length === 0, 'le joueur a disparu du classement');
+}
+
 /* ================= 6. Sécurité des actions ================= */
 console.log('\n6. Contrôles');
 {

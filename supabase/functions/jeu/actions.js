@@ -18,6 +18,7 @@ export const ADMIN_ACTIONS = new Set([
   'adminShuffleTeams', 'adminCatalog', 'adminAddQuestion', 'adminMontages', 'adminSaveMontage',
   'adminDeleteMontage', 'adminLeaderboard', 'adminBlindList',
   'adminPause', 'adminResume', 'adminJudge', 'adminScore',
+  'adminDeleteParty', 'adminRenamePlayer', 'adminDeletePlayer',
 ]);
 
 export function createActions(db) {
@@ -470,11 +471,23 @@ export function createActions(db) {
         return await publish(st, players, await loadAnswers(st.code, st.qIndex));
       }
 
+      /**
+       * Réglage en direct. Ce qui appartient au chapitre en cours (chrono, points,
+       * façon de répondre…) est écrit DANS ce chapitre : sinon la règle du chapitre
+       * continuerait de l'emporter et rien ne changerait à l'écran.
+       */
       case 'adminUpdateSettings': {
         const st = await loadGame(p.code);
         const players = await loadPlayers(st.code);
-        ['visual', 'sounds', 'audioOn', 'autoReveal', 'duration', 'choix', 'estimQcm', 'saisie', 'saisieNiveau'].forEach(k => {
-          if (p.patch && p.patch[k] !== undefined) st.settings[k] = p.patch[k];
+        const patch = p.patch || {};
+        const ch = st.settings.chapters[st.chapIndex];
+        ['visual', 'sounds', 'audioOn'].forEach(k => {
+          if (patch[k] !== undefined) st.settings[k] = patch[k];
+        });
+        E.REGLES_CHAPITRE.forEach(k => {
+          if (patch[k] === undefined) return;
+          st.settings[k] = patch[k];                       // pour les chapitres suivants
+          if (ch) { ch.regles = ch.regles || {}; ch.regles[k] = patch[k]; }
         });
         st.settings = E.normalizeSettings(st.settings);
         return await publish(st, players, await loadAnswers(st.code, st.qIndex));
@@ -546,6 +559,46 @@ export function createActions(db) {
         return { classement: g || [], themes: t || [], parties: parties || [] };
       }
 
+      /**
+       * Ménage dans le classement général. Rien ne part sans que le maître du jeu
+       * ait recopié le code de la partie (ou le pseudo du joueur) : une erreur de
+       * clic ne peut pas effacer une soirée.
+       */
+      case 'adminDeleteParty': {
+        const code = String(p.code || '').trim().toUpperCase();
+        if (!code) throw new Error('Quelle partie faut-il effacer ?');
+        if (String(p.confirme || '').trim().toUpperCase() !== code) {
+          throw new Error('Pour effacer cette partie, recopie son code : ' + code);
+        }
+        const { data: g } = check(await db.from('games').select('*').eq('code', code).maybeSingle());
+        if (g && g.state && g.state.status !== 'END') throw new Error('Cette partie est encore en cours.');
+        check(await db.from('answers').delete().eq('game_code', code));
+        check(await db.from('parties').delete().eq('code', code));
+        return { ok: true, code: code };
+      }
+
+      case 'adminDeletePlayer': {
+        const pseudo = String(p.pseudo || '').trim();
+        if (!pseudo) throw new Error('Quel joueur faut-il effacer ?');
+        if (String(p.confirme || '').trim() !== pseudo) {
+          throw new Error('Pour effacer « ' + pseudo + ' » de l\'historique, recopie son pseudo exactement.');
+        }
+        check(await db.from('answers').delete().eq('pseudo', pseudo));
+        return { ok: true };
+      }
+
+      case 'adminRenamePlayer': {
+        const pseudo = String(p.pseudo || '').trim();
+        const nouveau = E.cleanPseudo(p.nouveau);
+        if (!pseudo) throw new Error('Quel joueur faut-il renommer ?');
+        if (String(p.confirme || '').trim() !== pseudo) {
+          throw new Error('Pour renommer « ' + pseudo + ' », recopie son pseudo actuel.');
+        }
+        check(await db.from('answers').update({ pseudo: nouveau }).eq('pseudo', pseudo));
+        check(await db.from('parties').update({ vainqueur: nouveau }).eq('vainqueur', pseudo));
+        return { ok: true, pseudo: nouveau };
+      }
+
       /* ---------------- Joueurs ---------------- */
 
       case 'playerJoin': {
@@ -613,7 +666,8 @@ export function createActions(db) {
         const players = await loadPlayers(st.code);
         const pl = players[pid];
         const q = st.current;
-        if (!pl || !st.settings.joker) return { ok: false, msg: 'Pas de joker dans cette partie.' };
+        // le joker se règle chapitre par chapitre
+        if (!pl || !E.rules(st).joker) return { ok: false, msg: 'Pas de joker dans ce chapitre.' };
         if (st.status !== 'QUESTION' || st.qIndex !== p.qIndex) return { ok: false, msg: 'Trop tard !' };
         if (q.type !== 'QCM' || !q.choices || q.choices.length < 4) {
           return { ok: false, msg: 'Le joker ne marche que sur un QCM à 4 propositions.' };
