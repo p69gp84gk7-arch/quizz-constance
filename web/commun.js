@@ -2,7 +2,10 @@
 
 /** Version de l'appli, affichée en bas de l'écran d'accueil : permet de vérifier
  *  qu'un téléphone tourne bien la dernière version et pas une copie en cache. */
-const APP_VERSION = '2026-09-24-a';
+/** Version du serveur, renseignée au premier appel : sert à repérer un déploiement oublié. */
+let SERVER_BUILD = '?';
+
+const APP_VERSION = '2026-09-25-b';
 
 const VISUALS = {
   plateau: 'Plateau TV', elegant: 'Élégant', pop: 'Pop', neon: 'Néon', nature: 'Nature', enfants: 'Enfants',
@@ -32,8 +35,16 @@ async function rpc(action, params) {
   });
   let body = null;
   try { body = await res.json(); } catch (e) { throw new Error('Le serveur n\'a pas répondu (réseau ?).'); }
-  if (!body || body.ok !== true) throw new Error((body && body.error) || 'Erreur serveur (' + res.status + ').');
+  if (!body || body.ok !== true) {
+    const err = (body && body.error) || ('Erreur serveur (' + res.status + ').');
+    if (/Action inconnue/.test(err)) {
+      throw new Error('Le serveur du jeu n\'est pas à jour : il faut redéployer la fonction « jeu » dans Supabase '
+        + '(fichier supabase/functions/jeu/bundle.ts).');
+    }
+    throw new Error(err);
+  }
   if (body.now) Clock.sync(body.now, Date.now() - 200);
+  if (body.build) SERVER_BUILD = body.build;
   return body.data;
 }
 

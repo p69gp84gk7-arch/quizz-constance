@@ -562,7 +562,7 @@ function showJoin() {
 }
 
 function showHelp() {
-  modal(`<h2>📺 Diffuser l'écran public</h2>
+  modal(`<div class="muted" style="font-size:12px;float:right">site ${esc(APP_VERSION)} · serveur ${esc(SERVER_BUILD)}</div><h2>📺 Diffuser l'écran public</h2>
     <p>L'écran public n'affiche que les questions, les propositions, le chrono et les résultats. Les réponses et les indices restent sur ton interface.</p>
     <h3>💻 PC + HDMI (le plus simple)</h3>
     <ol><li>Branche la TV ou le vidéoprojecteur et choisis <b>« Étendre »</b> l'affichage (Windows : touche ⊞+P, Mac : Réglages → Moniteurs).</li>
