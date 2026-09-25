@@ -222,6 +222,10 @@ const clamp = (v, a, b, d) => { v = Number(v); return isNaN(v) ? d : Math.max(a,
 /* Réglages                                                            */
 /* ------------------------------------------------------------------ */
 
+/** Réglages qu'un chapitre peut redéfinir pour lui seul. */
+const REGLES_CHAPITRE = ['duration', 'points', 'estimation', 'margePct', 'estimQcm',
+  'saisie', 'saisieNiveau', 'joker', 'bonus', 'autoReveal'];
+
 function normalizeSettings(s) {
   s = s || {};
   let chapters = (s.chapters || []).map((c, i) => {
@@ -240,6 +244,11 @@ function normalizeSettings(s) {
       // Sélection à la main : uniquement ces questions (ids), ou tout sauf celles-là (exclus)
       ids: (c.ids || []).map(String),
       exclus: (c.exclus || []).map(String),
+      // Règles propres au chapitre : ce qui n'est pas renseigné suit les réglages de la partie
+      regles: REGLES_CHAPITRE.reduce((o, k) => {
+        if (c.regles && c.regles[k] !== undefined && c.regles[k] !== '') o[k] = c.regles[k];
+        return o;
+      }, {}),
     };
   });
   if (!chapters.length) {
@@ -272,6 +281,26 @@ function normalizeSettings(s) {
     joker: s.joker !== false,
     title: String(s.title || APP_NAME).slice(0, 60),
   };
+}
+
+/**
+ * Les règles qui s'appliquent vraiment : celles de la partie, corrigées par
+ * celles du chapitre en cours. C'est ce que tout le moteur doit consulter.
+ */
+function rules(st) {
+  const s = st.settings || {};
+  const ch = (s.chapters || [])[st.chapIndex];
+  if (!ch || !ch.regles || !Object.keys(ch.regles).length) return s;
+  const out = Object.assign({}, s, ch.regles);
+  // on revalide les valeurs venues du chapitre
+  out.duration = clamp(out.duration, 10, 120, s.duration);
+  out.margePct = clamp(out.margePct, 1, 50, s.margePct);
+  out.saisieNiveau = clamp(out.saisieNiveau, 2, 5, s.saisieNiveau);
+  if (['simple', 'rapidite', 'series'].indexOf(out.points) < 0) out.points = s.points;
+  if (['libre', 'qcm', 'mixte', 'auto'].indexOf(out.estimQcm) < 0) out.estimQcm = s.estimQcm;
+  if (['auto', 'jamais', 'toujours'].indexOf(out.saisie) < 0) out.saisie = s.saisie;
+  if (out.estimation !== 'proche' && out.estimation !== 'marge') out.estimation = s.estimation;
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -639,6 +668,7 @@ function loadQuestion(r, st, families) {
     epoque: String(r.epoque || ''), anecdote: String(r.anecdote || ''),
   };
   const level = st ? st.level : q.diff;
+  const reg = st ? rules(st) : {};
   const rep = String(r.reponse).trim();
 
   if (type === 'VF') {
@@ -651,7 +681,7 @@ function loadQuestion(r, st, families) {
     q.secret.tol = (r.choix3 === '' || r.choix3 === null || r.choix3 === undefined)
       ? null : Number(String(r.choix3).replace(',', '.'));
     q.answerText = formatNum(q.secret.value, q.unit) + (q.unit ? ' ' + q.unit : '');
-    const mode = st ? st.settings.estimQcm : 'libre';
+    const mode = st ? reg.estimQcm : 'libre';
     // « auto » : on propose 4 nombres tant que c'est facile, puis on demande la valeur exacte
     const enQcm = mode === 'qcm' || (mode === 'mixte' && Math.random() < 0.5) || (mode === 'auto' && level <= 2);
     if (!isNaN(q.secret.value) && enQcm) {
@@ -685,8 +715,8 @@ function loadQuestion(r, st, families) {
     q.type = 'QCM';
     q.answerText = rep;
     // Difficulté par la forme de la réponse : QCM en facile, clavier en difficile
-    const regle = st ? st.settings.saisie : 'jamais';
-    const seuil = st ? st.settings.saisieNiveau : 4;
+    const regle = st ? reg.saisie : 'jamais';
+    const seuil = st ? reg.saisieNiveau : 4;
     const auClavier = typable(rep) && (regle === 'toujours' || (regle === 'auto' && level >= seuil));
     if (auClavier) {
       q.type = 'SAISIE';
@@ -700,7 +730,7 @@ function loadQuestion(r, st, families) {
     } else {
       const fixed = [r.choix2, r.choix3, r.choix4].map(x => String(x == null ? '' : x).trim()).filter(x => x && x !== rep);
       let wrong = fixed;
-      const fam = st && st.settings.choix === 'adaptatifs' && families ? families[q.theme + '|' + q.text] : null;
+      const fam = st && reg.choix === 'adaptatifs' && families ? families[q.theme + '|' + q.text] : null;
       if (fam) wrong = adaptiveDistractors(rep, fixed, fam, q.cat, q.epoque, level);
       q.choices = shuffle([rep].concat(wrong.slice(0, 3)));
       q.secret.correct = q.choices.indexOf(rep);
@@ -734,14 +764,45 @@ function promote(st) {
 /** Thème + compte à rebours de 5 s, puis la question démarre toute seule. */
 function beginIntro(st) {
   const q = st.current;
-  // L'extrait dure le temps de réponse : 30 s de chrono = 30 s de musique
-  if (isSound(q.media)) q.media.dur = st.settings.duration;
+  const s = rules(st);
+  // L'extrait dure le temps de réponse, celui du chapitre : 30 s de chrono = 30 s de musique
+  if (isSound(q.media)) q.media.dur = s.duration;
+  // une nouvelle question repart sans temps mort
+  q.pausedMs = 0;
+  q.pausedAt = null;
   st.status = 'INTRO';
   q.introEnd = Date.now() + INTRO_S * 1000;
   q.start = q.introEnd;
   st.media = isSound(q.media)
     ? { seq: st.media.seq + 1, action: 'play', at: q.start }
     : { seq: st.media.seq + 1, action: 'stop' };
+}
+
+/** Temps mort accumulé sur la question en cours, en millisecondes. */
+function pausedMs(st) {
+  const q = st.current;
+  if (!q) return 0;
+  const acc = Number(q.pausedMs) || 0;
+  return q.pausedAt ? acc + (Date.now() - q.pausedAt) : acc;
+}
+
+/** Met le chrono en pause : le temps cesse de courir pour tout le monde. */
+function pause(st) {
+  const q = st.current;
+  if (!q || q.pausedAt) return false;
+  q.pausedAt = Date.now();
+  st.media = { seq: st.media.seq + 1, action: 'stop' };   // le son s'arrête aussi
+  return true;
+}
+
+/** Repart où on s'était arrêté, en décalant le départ du chrono. */
+function resume(st) {
+  const q = st.current;
+  if (!q || !q.pausedAt) return false;
+  q.pausedMs = (Number(q.pausedMs) || 0) + (Date.now() - q.pausedAt);
+  q.pausedAt = null;
+  if (q.introEnd) q.introEnd += 0;   // l'intro n'est pas concernée : elle est déjà passée
+  return true;
 }
 
 function startTimer(st) {
@@ -756,7 +817,7 @@ function startTimer(st) {
  */
 function decorate(st, players, prev) {
   const q = st.current;
-  const s = st.settings;
+  const s = rules(st);
   q.mult = 1;
   if (prev) { q.gold = prev.gold; q.duel = prev.duel; q.mult = prev.mult || 1; return; }
   if (s.finale && st.qIndex === st.total - 1) q.mult = 3;
@@ -810,7 +871,7 @@ function points(s, diff, t, streak) {
  */
 function doReveal(st, players, answers) {
   const q = st.current;
-  const s = st.settings;
+  const s = rules(st);
   const pids = Object.keys(players);
   const results = {};
   const dist = q.choices ? q.choices.map(() => 0) : null;
@@ -975,7 +1036,7 @@ function liveJudge(st, answers) {
   if (q.type === 'SAISIE') return a => matchText(a, q.secret.formes);
   if (q.type === 'ORDRE') return a => (a || []).map(i => q.items[i]).join('|') === q.secret.order.join('|');
   if (q.type === 'CARTE') return a => mapScore(q, a).f >= MAP_OK;
-  const s = st.settings;
+  const s = rules(st);
   if (s.estimation === 'proche') {
     const ds = Object.keys(answers).map(p => Math.abs(Number(answers[p].a) - q.secret.value)).filter(d => !isNaN(d));
     const min = ds.length ? Math.min.apply(null, ds) : null;
@@ -1038,12 +1099,14 @@ function chapterInfo(st) {
  * aucune bonne réponse n'en sort tant que le statut n'est pas REVEAL.
  */
 function publicView(st, players, answers, pid) {
-  const s = st.settings;
+  const s = rules(st);
   const v = {
     code: st.code, status: st.status, now: Date.now(), title: s.title,
     visual: s.visual, sounds: s.sounds, audioOn: s.audioOn, duration: s.duration, points: s.points,
     qIndex: st.qIndex, total: st.total, chapQ: st.chapQ, level: st.level, chapter: chapterInfo(st),
     media: st.media, playerCount: Object.keys(players).length,
+    // chrono : temps mort accumulé et pause en cours, pour que tous les écrans s'accordent
+    pausedMs: pausedMs(st), paused: !!(st.current && st.current.pausedAt),
     format: s.format, lives: s.lives, joker: s.joker, finished: !!st.finished,
   };
   if (s.format === 'equipes') v.teams = teamRanking(st, players);
@@ -1150,6 +1213,7 @@ function adminView(st, players, answers) {
       joker: !!(p.joker && st.current && p.joker.q === st.qIndex), jokerUsed: !!p.joker,
       duel: !!(st.current && st.current.duel && st.current.duel.indexOf(p.pid) >= 0),
       lostLife: res ? !!res.lostLife : false,
+      corrigeMJ: res ? !!res.corrigeMJ : false,
     };
   });
   v.answeredCount = Object.keys(live).length;
@@ -1174,9 +1238,11 @@ function cleanPseudo(pseudo) {
 
 /** Vérifie qu'une réponse arrive à temps et rend le temps de réponse en secondes. */
 function answerTime(st, now) {
-  const elapsed = (now - st.current.start) / 1000;
-  if (elapsed > st.settings.duration + GRACE_S) return null;
-  return Math.round(Math.min(Math.max(elapsed, 0), st.settings.duration) * 10) / 10;
+  if (st.current && st.current.pausedAt) return null;       // chrono en pause : personne ne répond
+  const duree = rules(st).duration;
+  const elapsed = (now - st.current.start - pausedMs(st)) / 1000;
+  if (elapsed > duree + GRACE_S) return null;
+  return Math.round(Math.min(Math.max(elapsed, 0), duree) * 10) / 10;
 }
 
 /* ================= ACTIONS (actions.js) ================= */
@@ -1197,6 +1263,7 @@ const ADMIN_ACTIONS = new Set([
   'adminSkip', 'adminEnd', 'adminMedia', 'adminSetLevel', 'adminUpdateSettings', 'adminKick',
   'adminShuffleTeams', 'adminCatalog', 'adminAddQuestion', 'adminMontages', 'adminSaveMontage',
   'adminDeleteMontage', 'adminLeaderboard', 'adminBlindList',
+  'adminPause', 'adminResume', 'adminJudge', 'adminScore',
 ]);
 
 function createActions(db) {
@@ -1541,6 +1608,67 @@ function createActions(db) {
         return await publish(st, players, {});
       }
 
+      /** Met le chrono en pause : le temps s'arrête pour tout le monde, le son aussi. */
+      case 'adminPause': {
+        const st = await loadGame(p.code);
+        const players = await loadPlayers(st.code);
+        if (LIVE.indexOf(st.status) >= 0) pause(st);
+        return await publish(st, players, await loadAnswers(st.code, st.qIndex));
+      }
+
+      /** Reprend là où on s'était arrêté. */
+      case 'adminResume': {
+        const st = await loadGame(p.code);
+        const players = await loadPlayers(st.code);
+        if (LIVE.indexOf(st.status) >= 0) resume(st);
+        return await publish(st, players, await loadAnswers(st.code, st.qIndex));
+      }
+
+      /**
+       * Après la révélation : le maître du jeu décide qu'une réponse est juste
+       * (ou fausse). Les points suivent le temps de réponse du joueur, comme
+       * s'il avait été compté juste dès le départ.
+       */
+      case 'adminJudge': {
+        const st = await loadGame(p.code);
+        const players = await loadPlayers(st.code);
+        const pid = String(p.pid || '');
+        const juste = p.ok !== false;
+        if (!st.reveal || !st.reveal.results[pid] || !players[pid]) {
+          throw new Error('Cette réponse ne peut plus être corrigée.');
+        }
+        const r = st.reveal.results[pid];
+        if (r.ok === juste) return adminView(st, players, {});
+        const reg = rules(st);
+        const q = st.current;
+        const avant = r.pts || 0;
+        const apres = juste ? points(reg, q ? q.diff : 1, r.t, (players[pid].streak || 0) + 1) * (st.reveal.mult || 1) : 0;
+        // on met à jour le résultat, le score et les statistiques du joueur
+        r.ok = juste;
+        r.pts = apres;
+        r.corrigeMJ = true;
+        players[pid].score = Math.max(0, (players[pid].score || 0) - avant + apres);
+        players[pid].good = Math.max(0, (players[pid].good || 0) + (juste ? 1 : -1));
+        st.reveal.nbOk = Object.keys(st.reveal.results).filter(x => st.reveal.results[x].ok).length;
+        st.reveal.rate = st.reveal.nbPlay ? st.reveal.nbOk / st.reveal.nbPlay : 0;
+        await savePlayers(st.code, players);
+        check(await db.from('answers').update({ correct: juste, points: apres })
+          .eq('game_code', st.code).eq('q_index', st.qIndex).eq('pid', pid));
+        return await publish(st, players, await loadAnswers(st.code, st.qIndex));
+      }
+
+      /** Ajuste le score d'un joueur à la main, dans un sens ou dans l'autre. */
+      case 'adminScore': {
+        const st = await loadGame(p.code);
+        const players = await loadPlayers(st.code);
+        const pid = String(p.pid || '');
+        if (!players[pid]) throw new Error('Joueur introuvable.');
+        const delta = Math.max(-10000, Math.min(10000, Number(p.delta) || 0));
+        players[pid].score = Math.max(0, (players[pid].score || 0) + delta);
+        await savePlayers(st.code, players);
+        return await publish(st, players, await loadAnswers(st.code, st.qIndex));
+      }
+
       case 'adminReveal': {
         const st = await loadGame(p.code);
         const players = await loadPlayers(st.code);
@@ -1800,7 +1928,7 @@ function createActions(db) {
 
 
 /** Version du serveur : renvoyée par l'action « time », pour vérifier ce qui est déployé. */
-const BUILD = '2026-09-25-62d326';
+const BUILD = '2026-09-25-556d83';
 
 const db = createDb(
   Deno.env.get('SUPABASE_URL') ?? '',

@@ -5,7 +5,7 @@
 /** Version du serveur, renseignée au premier appel : sert à repérer un déploiement oublié. */
 let SERVER_BUILD = '?';
 
-const APP_VERSION = '2026-09-25-c';
+const APP_VERSION = '2026-09-25-d';
 
 const VISUALS = {
   plateau: 'Plateau TV', elegant: 'Élégant', pop: 'Pop', neon: 'Néon', nature: 'Nature', enfants: 'Enfants',
@@ -79,9 +79,12 @@ const Clock = {
     this.offset = this.offset === 0 ? off : this.offset * 0.7 + off * 0.3;
   },
   now() { return Date.now() + this.offset; },
-  remaining(start, duration) {
+  /** Temps restant, en tenant compte des pauses demandées par le maître du jeu. */
+  remaining(start, duration, v) {
     if (!start) return duration;
-    return Math.max(0, duration - (this.now() - start) / 1000);
+    const mort = v ? (Number(v.pausedMs) || 0) : 0;
+    const fin = v && v.paused ? (v.now || this.now()) : this.now();
+    return Math.max(0, duration - (fin - start - mort) / 1000);
   },
 };
 

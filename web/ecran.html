@@ -6,7 +6,7 @@
 <title>Quizz — écran</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Playfair+Display:wght@600;800&family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=2026-09-25-c">
+<link rel="stylesheet" href="styles.css?v=2026-09-25-d">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   html, body { height: 100%; overflow: hidden; }
@@ -71,8 +71,8 @@
 <div class="stage" id="app"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=2026-09-25-c"></script>
-<script src="commun.js?v=2026-09-25-c"></script>
+<script src="config.js?v=2026-09-25-d"></script>
+<script src="commun.js?v=2026-09-25-d"></script>
 <script>
 /* Sans paramètre, l'écran suit tout seul la dernière partie créée : aucun rechargement entre deux parties. */
 let CODE = (new URLSearchParams(location.search).get('p') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -376,7 +376,9 @@ setInterval(() => {
     return;
   }
   if (!v || v.status !== 'QUESTION' || !v.question) return;
-  const rem = Clock.remaining(v.question.start, v.duration);
+  const rem = Clock.remaining(v.question.start, v.duration, v);
+  const pz = $('#pausebandeau');
+  if (pz) pz.style.display = v.paused ? '' : 'none';
   const c = $('#ringc'), n = $('#ringn');
   if (c) { c.style.strokeDashoffset = 100.5 * (1 - rem / v.duration); c.style.stroke = rem <= 5 ? 'var(--ko)' : 'var(--accent)'; }
   if (n) n.textContent = Math.ceil(rem);

@@ -17,6 +17,7 @@ export const ADMIN_ACTIONS = new Set([
   'adminSkip', 'adminEnd', 'adminMedia', 'adminSetLevel', 'adminUpdateSettings', 'adminKick',
   'adminShuffleTeams', 'adminCatalog', 'adminAddQuestion', 'adminMontages', 'adminSaveMontage',
   'adminDeleteMontage', 'adminLeaderboard', 'adminBlindList',
+  'adminPause', 'adminResume', 'adminJudge', 'adminScore',
 ]);
 
 export function createActions(db) {
@@ -359,6 +360,67 @@ export function createActions(db) {
         const players = await loadPlayers(st.code);
         if (st.status === 'READ' || (st.status === 'INTRO' && !st.current.start)) E.startTimer(st);
         return await publish(st, players, {});
+      }
+
+      /** Met le chrono en pause : le temps s'arrête pour tout le monde, le son aussi. */
+      case 'adminPause': {
+        const st = await loadGame(p.code);
+        const players = await loadPlayers(st.code);
+        if (E.LIVE.indexOf(st.status) >= 0) E.pause(st);
+        return await publish(st, players, await loadAnswers(st.code, st.qIndex));
+      }
+
+      /** Reprend là où on s'était arrêté. */
+      case 'adminResume': {
+        const st = await loadGame(p.code);
+        const players = await loadPlayers(st.code);
+        if (E.LIVE.indexOf(st.status) >= 0) E.resume(st);
+        return await publish(st, players, await loadAnswers(st.code, st.qIndex));
+      }
+
+      /**
+       * Après la révélation : le maître du jeu décide qu'une réponse est juste
+       * (ou fausse). Les points suivent le temps de réponse du joueur, comme
+       * s'il avait été compté juste dès le départ.
+       */
+      case 'adminJudge': {
+        const st = await loadGame(p.code);
+        const players = await loadPlayers(st.code);
+        const pid = String(p.pid || '');
+        const juste = p.ok !== false;
+        if (!st.reveal || !st.reveal.results[pid] || !players[pid]) {
+          throw new Error('Cette réponse ne peut plus être corrigée.');
+        }
+        const r = st.reveal.results[pid];
+        if (r.ok === juste) return E.adminView(st, players, {});
+        const reg = E.rules(st);
+        const q = st.current;
+        const avant = r.pts || 0;
+        const apres = juste ? E.points(reg, q ? q.diff : 1, r.t, (players[pid].streak || 0) + 1) * (st.reveal.mult || 1) : 0;
+        // on met à jour le résultat, le score et les statistiques du joueur
+        r.ok = juste;
+        r.pts = apres;
+        r.corrigeMJ = true;
+        players[pid].score = Math.max(0, (players[pid].score || 0) - avant + apres);
+        players[pid].good = Math.max(0, (players[pid].good || 0) + (juste ? 1 : -1));
+        st.reveal.nbOk = Object.keys(st.reveal.results).filter(x => st.reveal.results[x].ok).length;
+        st.reveal.rate = st.reveal.nbPlay ? st.reveal.nbOk / st.reveal.nbPlay : 0;
+        await savePlayers(st.code, players);
+        check(await db.from('answers').update({ correct: juste, points: apres })
+          .eq('game_code', st.code).eq('q_index', st.qIndex).eq('pid', pid));
+        return await publish(st, players, await loadAnswers(st.code, st.qIndex));
+      }
+
+      /** Ajuste le score d'un joueur à la main, dans un sens ou dans l'autre. */
+      case 'adminScore': {
+        const st = await loadGame(p.code);
+        const players = await loadPlayers(st.code);
+        const pid = String(p.pid || '');
+        if (!players[pid]) throw new Error('Joueur introuvable.');
+        const delta = Math.max(-10000, Math.min(10000, Number(p.delta) || 0));
+        players[pid].score = Math.max(0, (players[pid].score || 0) + delta);
+        await savePlayers(st.code, players);
+        return await publish(st, players, await loadAnswers(st.code, st.qIndex));
       }
 
       case 'adminReveal': {

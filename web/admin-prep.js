@@ -27,6 +27,7 @@ function chapterAutoName(c) {
   else if (c.eras.length > 1) bouts.push(c.eras.length + ' époques');
 
   if (c.ids && c.ids.length) bouts.push(c.ids.length + ' extraits choisis');
+  if (c.regles && c.regles.duration) bouts.push(c.regles.duration + ' s');
   if (c.dates) bouts.push('📅 Dates');
   if (c.media === 'photo') bouts.push('📸 Photos');
   else if (c.media === 'son') bouts.push('🎧 Extraits');
@@ -269,7 +270,40 @@ function chapterCard(c, i) {
       <span class="spacer"></span>
       <span class="pill" style="${avail < c.nb ? 'background:var(--ko);color:#fff' : ''}">≈ ${avail} disponibles</span>
     </div>
+    ${reglesChapitre(c, i)}
   </div>`;
+}
+
+/**
+ * Règles propres au chapitre. Tout ce qui reste sur « comme la partie » suit les
+ * réglages généraux : le maître du jeu ne remplit que ce qu'il veut changer.
+ */
+function reglesChapitre(c, i) {
+  const r = c.regles || {};
+  const n = Object.keys(r).length;
+  const sel = (cle, libelles) => `<select data-cr="${cle}" style="width:auto">
+    <option value="">comme la partie</option>
+    ${Object.keys(libelles).map(k => {
+      const val = typeof r[cle] === 'boolean' ? (r[cle] ? 'oui' : 'non') : String(r[cle]);
+      return `<option value="${k}" ${val === k ? 'selected' : ''}>${libelles[k]}</option>`;
+    }).join('')}</select>`;
+  const durees = {};
+  [10, 15, 20, 25, 30, 45, 60, 90].forEach(d => { durees[d] = d + ' s'; });
+  const niveaux = { 2: '★★', 3: '★★★', 4: '★★★★', 5: '★★★★★' };
+  return `<details class="settings-card" ${n ? 'open' : ''}>
+    <summary class="lbl" style="cursor:pointer">⚙️ Règles de ce chapitre${n ? ` <span class="pill accent">${n} réglage${n > 1 ? 's' : ''}</span>` : ' <span class="muted">(identiques à la partie)</span>'}</summary>
+    <div class="grid2" style="margin-top:8px">
+      <label>Chrono ${sel('duration', durees)}</label>
+      <label>Points ${sel('points', { simple: '1 point', rapidite: 'rapidité', series: 'séries' })}</label>
+      <label>Réponse tapée ${sel('saisie', { auto: 'selon la difficulté', jamais: 'jamais', toujours: 'toujours' })}</label>
+      <label>À partir du niveau ${sel('saisieNiveau', niveaux)}</label>
+      <label>Estimations ${sel('estimQcm', { auto: 'selon la difficulté', mixte: 'mélange', qcm: 'en QCM', libre: 'réponse libre' })}</label>
+      <label>Joker 50/50 ${sel('joker', { oui: 'autorisé', non: 'interdit' })}</label>
+      <label>Questions en or ${sel('bonus', { oui: 'oui', non: 'non' })}</label>
+      <label>Révélation ${sel('autoReveal', { oui: 'automatique', non: 'à la main' })}</label>
+    </div>
+    ${n ? `<div class="row"><button class="btn small" data-creset>↺ Tout remettre comme la partie</button></div>` : ''}
+  </details>`;
 }
 
 function bindPreparer() {
@@ -309,6 +343,18 @@ function bindPreparer() {
     card.querySelectorAll('[data-era]').forEach(b => b.onclick = () => { toggle(c.eras, b.dataset.era); rerender(); });
     const dt = card.querySelector('[data-dates]');
     if (dt) dt.onclick = () => { c.dates = !c.dates; rerender(); };
+    card.querySelectorAll('[data-cr]').forEach(el => el.onchange = () => {
+      const k = el.dataset.cr;
+      c.regles = c.regles || {};
+      const v = el.value;
+      if (v === '') delete c.regles[k];
+      else if (k === 'joker' || k === 'bonus' || k === 'autoReveal') c.regles[k] = v === 'oui';
+      else if (k === 'duration' || k === 'saisieNiveau') c.regles[k] = Number(v);
+      else c.regles[k] = v;
+      rerender();
+    });
+    const cz = card.querySelector('[data-creset]');
+    if (cz) cz.onclick = () => { c.regles = {}; rerender(); };
     const an = card.querySelector('[data-autoname]');
     if (an) an.onclick = () => { c.autoName = true; rerender(); };
     const ex = card.querySelector('[data-extraits]');

@@ -206,6 +206,76 @@ console.log('\n3. Commandes du maître du jeu');
   ok(db.rows('games')[0].state.status === 'END', 'la partie peut être arrêtée à tout moment');
 }
 
+/* ================= 3 bis. Contrôle total du maître du jeu ================= */
+console.log('\n3 bis. Pause du chrono et correction après coup');
+{
+  const { db, handle } = fresh();
+  const mj = await handle('adminCreateGame', { settings: {
+    chapters: [
+      { name: 'Manche 1', nb: 2, level: 1, types: ['QCM'] },
+      { name: 'Manche rapide', nb: 2, level: 1, types: ['QCM'], regles: { duration: 12, points: 'simple' } },
+    ], duration: 30, points: 'rapidite' } });
+  const code = mj.code;
+  await handle('playerJoin', { code, pid: PIDS[0], pseudo: 'Constance' });
+  await handle('playerJoin', { code, pid: PIDS[1], pseudo: 'Paul' });
+
+  await handle('adminNext', { code });          // écran de chapitre
+  await handle('adminNext', { code });          // première question
+  ok(db.rows('game_live')[0].state.duration === 30, 'chapitre 1 : chrono de 30 s');
+
+  // --- pause
+  fastForwardIntro(db, code);
+  await handle('adminPause', { code });
+  let live = db.rows('game_live')[0].state;
+  ok(live.paused === true, 'le chrono est en pause');
+  const refus = await handle('playerAnswer', { code, pid: PIDS[0], qIndex: 0, answer: 0 });
+  ok(refus.ok === false, 'pendant la pause, personne ne peut répondre');
+  ok(db.rows('games')[0].state.media.action === 'stop', 'le son s\'arrête aussi');
+
+  await handle('adminResume', { code });
+  live = db.rows('game_live')[0].state;
+  ok(live.paused === false, 'la partie repart');
+  ok(live.pausedMs >= 0, 'le temps mort est mémorisé et ne compte pas dans le chrono');
+  const q = db.rows('game_mj')[0].state.current;
+  const bon = await handle('playerAnswer', { code, pid: PIDS[0], qIndex: 0, answer: q.correct });
+  await handle('playerAnswer', { code, pid: PIDS[1], qIndex: 0, answer: (q.correct + 1) % 4 });
+  ok(bon.ok === true, 'après la reprise, les réponses repassent');
+
+  // --- correction après la révélation
+  await handle('adminReveal', { code });
+  const avant = db.rows('players').filter(p => p.pid === PIDS[1])[0].data.score;
+  ok(avant === 0, 'Paul n\'a rien marqué : sa réponse était fausse');
+  await handle('adminJudge', { code, pid: PIDS[1], ok: true });
+  const paul = db.rows('players').filter(p => p.pid === PIDS[1])[0];
+  ok(paul.data.score > 0, 'le maître du jeu lui accorde la réponse : ' + paul.data.score + ' points');
+  ok(paul.data.good === 1, 'sa bonne réponse est comptée dans ses statistiques');
+  const ligne = db.rows('answers').filter(a => a.pid === PIDS[1] && a.q_index === 0)[0];
+  ok(ligne.correct === true && ligne.points === paul.data.score, 'l\'historique du classement est corrigé aussi');
+  const vue = db.rows('game_mj')[0].state;
+  ok(vue.players.filter(p => p.pseudo === 'Paul')[0].corrigeMJ === true, 'la correction est signalée au maître du jeu');
+
+  await handle('adminJudge', { code, pid: PIDS[1], ok: false });
+  ok(db.rows('players').filter(p => p.pid === PIDS[1])[0].data.score === 0, 'et il peut revenir en arrière');
+
+  // --- points donnés à la main
+  await handle('adminScore', { code, pid: PIDS[1], delta: 120 });
+  ok(db.rows('players').filter(p => p.pid === PIDS[1])[0].data.score === 120, 'points ajoutés à la main');
+  await handle('adminScore', { code, pid: PIDS[1], delta: -500 });
+  ok(db.rows('players').filter(p => p.pid === PIDS[1])[0].data.score === 0, 'un score ne descend jamais sous zéro');
+
+  // --- règles propres au second chapitre
+  await handle('adminNext', { code });          // question 2 du chapitre 1
+  fastForwardIntro(db, code);
+  await handle('adminReveal', { code });
+  await handle('adminNext', { code });          // écran du chapitre 2
+  await handle('adminNext', { code });          // première question du chapitre 2
+  live = db.rows('game_live')[0].state;
+  ok(live.duration === 12, 'chapitre 2 : le chrono passe à 12 s');
+  ok(live.points === 'simple', 'chapitre 2 : les points passent en mode simple');
+  const q2 = db.rows('game_mj')[0].state.current;
+  ok(q2.media === null || !q2.media || q2.media.dur === 12, 'un extrait suivrait aussi le chrono du chapitre');
+}
+
 /* ================= 4. Présence et reprise ================= */
 console.log('\n4. Présence des joueurs');
 {

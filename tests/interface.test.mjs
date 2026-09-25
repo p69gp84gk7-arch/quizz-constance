@@ -295,6 +295,22 @@ console.log('\n3. L\'interface du maître du jeu');
   const titre = M.win.eval('A.draft.chapters[0].name');
   ok(/^Blind test musique/.test(titre), 'le titre suit le thème coché : « ' + titre + ' »');
 
+  // Règles propres au chapitre
+  const selDuree = M.doc.querySelector('[data-cr="duration"]');
+  ok(!!selDuree, 'chaque chapitre a son bloc « Règles de ce chapitre »');
+  selDuree.value = '15'; selDuree.onchange();
+  await wait(60);
+  ok(M.win.eval('A.draft.chapters[0].regles.duration') === 15, 'le chrono de ce chapitre passe à 15 s');
+  const selPts = M.doc.querySelector('[data-cr="points"]');
+  selPts.value = 'simple'; selPts.onchange();
+  await wait(60);
+  ok(M.win.eval('A.draft.chapters[0].regles.points') === 'simple', 'et ses points passent en mode simple');
+  ok(/15 s/.test(M.win.eval('A.draft.chapters[0].name')), 'le titre du chapitre le rappelle');
+  M.doc.querySelector('[data-creset]').click();
+  await wait(60);
+  ok(Object.keys(JSON.parse(M.win.eval('JSON.stringify(A.draft.chapters[0].regles)'))).length === 0,
+    '« tout remettre comme la partie » efface les règles particulières');
+
   M.doc.querySelector('[data-extraits]').click();
   await wait(200);
   const modalTxt = M.doc.body.textContent.replace(/\s+/g, ' ');

@@ -136,6 +136,7 @@ function act(fn, arg) {
   document.querySelectorAll('[data-act]').forEach(b => b.disabled = true);
   const params = { code: A.code };
   if (ACT_ARG[fn] && arg !== undefined) params[ACT_ARG[fn]] = arg;
+  else if (arg && typeof arg === 'object') Object.assign(params, arg);   // plusieurs valeurs nommées
   return rpc(fn, params).then(v => { A.key = ''; onView(v); })
     .catch(e => toast(e, true))
     .finally(() => { A.busy = false; document.querySelectorAll('[data-act]').forEach(b => b.disabled = false); });
@@ -322,6 +323,7 @@ function mainCard(v) {
     ${q.hint ? `<div class="muted">Consigne : ${esc(q.hint)}</div>` : ''}
     <div class="answer-box"><div class="lbl2">Réponse</div><div style="font-size:20px;font-weight:800">${esc(q.answerText)}</div>
       ${q.expl ? `<div style="margin-top:6px">💡 ${esc(q.expl)}</div>` : ''}</div>
+    ${v.paused ? '<div class="banner" style="border-color:var(--accent)">⏸ Chrono en pause — personne ne peut répondre</div>' : ''}
     ${media}
     ${body}
     ${live || r ? liveAnswers(v) : ''}
@@ -332,6 +334,9 @@ function mainCard(v) {
       <span class="pill">Niveau ${r.levelBefore} → ${r.levelAfter} ${r.levelAfter > r.levelBefore ? '⬆' : ''}</span>${r.mult > 1 ? `<span class="pill accent">Points ×${r.mult}</span>` : ''}</div>` : ''}
     <div class="actions main-actions">${btn}
       ${v.status === 'REVEAL' ? '<button class="btn" data-act onclick="act(\'adminShowScores\')">🏆 <span class="hide-phone">Afficher le </span>classement</button>' : ''}
+      ${live && !intro ? (v.paused
+        ? '<button class="btn primary" data-act onclick="act(\'adminResume\')">▶ Reprendre</button>'
+        : '<button class="btn" data-act onclick="act(\'adminPause\')" title="Arrêter le temps pour tout le monde">⏸<span class="hide-phone"> Pause</span></button>') : ''}
       ${intro || v.status === 'READ' || live ? '<button class="btn" data-act onclick="act(\'adminSkip\')" title="Remplacer la question">🔄<span class="hide-phone"> Remplacer la question</span></button>' : ''}</div>
     <div class="actions"><span class="spacer"></span><button class="btn danger small" onclick="endGame()">Terminer la partie</button></div>
   </div>`;
@@ -472,6 +477,16 @@ function bindSettings() {
   on('#s-auto', e => upd({ autoReveal: e.target.checked }));
 }
 
+/** Le maître du jeu accorde ou retire une bonne réponse après la révélation. */
+function juger(pid, ok) {
+  act('adminJudge', { pid: pid, ok: ok });
+}
+
+/** Ajuste le score d'un joueur à la main. */
+function ajusterScore(pid, delta) {
+  act('adminScore', { pid: pid, delta: delta });
+}
+
 /* ---------------- Joueurs ---------------- */
 
 function renderPlayers(v) {
@@ -486,15 +501,24 @@ function renderPlayers(v) {
     ${v.players.map(p => {
       let st = '';
       if (showAns) {
-        if (p.ok === true) st = `✅ ${esc(p.answerText)} <b>+${p.pts}</b>`;
-        else if (p.ok === false) st = p.answered ? `❌ ${esc(p.answerText)}` : '⌛ pas de réponse';
+        if (p.ok === true) st = `✅ ${esc(p.answerText)} <b>+${p.pts}</b>${p.corrigeMJ ? ' <span class="muted">(accordé)</span>' : ''}`;
+        else if (p.ok === false) st = p.answered ? `❌ ${esc(p.answerText)}${p.corrigeMJ ? ' <span class="muted">(refusé)</span>' : ''}` : '⌛ pas de réponse';
         else st = p.answered ? `📨 ${esc(p.answerText)} · ${p.t}s` : '… réfléchit';
       }
+      // Après la révélation, le maître du jeu a le dernier mot sur chaque réponse
+      const corrige = v.status === 'REVEAL' && p.ok !== null && p.ok !== undefined
+        ? `<div class="st" style="margin-top:4px">
+             ${p.ok
+               ? `<button class="btn small" onclick="juger('${p.pid}', false)" title="Retirer la bonne réponse">❌ retirer</button>`
+               : `<button class="btn small" onclick="juger('${p.pid}', true)" title="Compter juste : les points suivent son temps de réponse${p.t !== null && p.t !== undefined ? ' (' + p.t + ' s)' : ''}">✅ accorder</button>`}
+             <button class="btn small" onclick="ajusterScore('${p.pid}', 50)" title="+50 points">+50</button>
+             <button class="btn small" onclick="ajusterScore('${p.pid}', -50)" title="−50 points">−50</button>
+           </div>` : '';
       const pres = { on: 'En ligne', bg: 'A quitté l\'appli', off: 'Déconnecté' + (p.lastSeen !== null ? ' depuis ' + p.lastSeen + 's' : '') }[p.presence];
       return `<div class="player" title="${pres}">
         <span class="dot ${p.presence}"></span>
         <div style="min-width:0"><div class="nm">${p.rank}. ${esc(p.pseudo)} ${playerBadges(v, p)} ${p.streak >= 3 ? '🔥' : ''} ${p.exits ? `<span title="Sorties de l'appli pendant une question" style="color:var(--ko)">⚠${p.exits}</span>` : ''}</div>
-          ${st ? `<div class="st">${st}</div>` : ''}</div>
+          ${st ? `<div class="st">${st}</div>` : ''}${corrige}</div>
         <span class="muted" style="font-size:12px">${p.good}✔</span>
         <span class="sc">${p.score}</span>
         <button class="x" title="Retirer" onclick="kick('${p.pid}', '${esc(p.pseudo).replace(/'/g, '')}')">✕</button></div>`;
@@ -516,7 +540,7 @@ setInterval(() => {
     return;
   }
   if (!v || v.status !== 'QUESTION' || !v.current) return;
-  const rem = Clock.remaining(v.current.start, v.settings.duration);
+  const rem = Clock.remaining(v.current.start, v.duration || v.settings.duration, v);
   const bar = $('#tbar');
   if (bar) { bar.firstElementChild.style.width = (100 * rem / v.settings.duration) + '%'; bar.classList.toggle('warn', rem <= 5); $('#tnum').textContent = Math.ceil(rem); }
   const allIn = v.players.length > 0 && v.answeredCount >= v.players.length;
