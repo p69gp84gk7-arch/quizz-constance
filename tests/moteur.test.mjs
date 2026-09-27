@@ -353,7 +353,8 @@ console.log('\n6. Formats de jeu');
 /* ================= 7. Vues : aucune réponse ne fuit ================= */
 console.log('\n7. Vues envoyées aux téléphones');
 {
-  const st = createGame({ chapters: [{ nb: 5, level: 1 }], estimQcm: 'libre' });
+  // types imposés : on teste ce qui sort des vues, pas le hasard du tirage
+  const st = createGame({ chapters: [{ nb: 5, level: 1, types: ['QCM'] }], estimQcm: 'libre', saisie: 'jamais' });
   const players = mkPlayers(2);
   const pids = Object.keys(players);
   adminNext(st, players, {});

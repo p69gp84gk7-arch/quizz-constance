@@ -271,7 +271,8 @@ function header(v) {
   const t = myTeam(v);
   return `<div class="top">
       <span class="me grow">👤 ${esc(v.me ? v.me.pseudo : S.pseudo)}${t ? ' · ' + esc(t.name) : ''}</span>
-      ${v.format === 'survie' && v.me ? `<span class="pill">${v.me.out ? '💀' : hearts(v.me.lives, v.lives)}</span>` : ''}
+      ${(v.format === 'survie' || (v.format === 'themes' && v.me && v.me.lives !== undefined)) && v.me
+        ? `<span class="pill">${v.me.out ? '💀' : hearts(v.me.lives, v.lives)}</span>` : ''}
       <span class="pill" id="h-score">${v.me ? v.me.score : 0} pt${v.me && v.me.score > 1 ? 's' : ''}</span>
       <span class="pill accent" id="h-rank">${v.me ? v.me.rank : '-'}<sup>e</sup></span>
     </div>`;
@@ -442,6 +443,7 @@ function formatRule(v) {
     survie: v.lives + ' vie' + (v.lives > 1 ? 's' : '') + ' : chaque erreur en coûte une. Le dernier survivant gagne !',
     equipes: 'Les points de ton équipe = la moyenne des points de ses joueurs.',
     buzzer: 'Seule la première bonne réponse rapporte des points : sois rapide !',
+    themes: 'À tour de rôle, vous choisissez le thème de la question suivante dans le tableau. Celui qui a le moins de points choisit en premier.',
   }[v.format] || '';
 }
 
