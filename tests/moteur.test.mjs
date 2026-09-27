@@ -225,6 +225,54 @@ console.log('\n4 bis. Propositions qui se ressemblent');
   ok(E.normalizeSettings({ pieges: 'n\'importe quoi' }).pieges === 'auto', 'une valeur inconnue retombe sur « selon la difficulté »');
 }
 
+/* ================= 4 ter. Devinettes à quatre indices ================= */
+console.log('\n4 ter. Devinette : quatre indices, le double de points au premier');
+{
+  const r = { id: 'D1', theme: 'Histoire', categorie: 'Personnalité', difficulte: 2, type: 'INDICE',
+    question: '🕵️ Qui suis-je ?', reponse: 'Marie Curie',
+    choix2: 'Je suis née à Varsovie en 1867. | J\'ai épousé un physicien français. | J\'ai découvert deux éléments chimiques. | Je suis la seule femme deux fois prix Nobel.',
+    choix3: 'Rosalind Franklin', choix4: 'Ada Lovelace' };
+  const st = { level: 2, settings: E.normalizeSettings({ duration: 40, saisie: 'auto' }), chapIndex: 0 };
+  const q = E.loadQuestion(r, st, {});
+  ok(q.clues.length === 4, 'les quatre indices sont là');
+  ok(q.clues[0] === 'Je suis née à Varsovie en 1867.', 'du plus vague au plus parlant : « ' + q.clues[0] + ' »');
+  ok(q.type === 'QCM' && q.choices.length >= 3, 'une devinette facile se joue en QCM');
+  ok(q.choices.indexOf('Marie Curie') >= 0, 'la bonne réponse est proposée');
+  ok(q.choices.every(c => c.indexOf('Varsovie') < 0), 'les indices ne se retrouvent jamais dans les propositions');
+
+  // le découpage du temps : un indice tous les quarts de chrono
+  ok(E.cluesShown(0, 40, 4) === 1 && E.cluesShown(9, 40, 4) === 1, 'avant 10 s : un seul indice');
+  ok(E.cluesShown(10, 40, 4) === 2 && E.cluesShown(25, 40, 4) === 3, 'puis un de plus tous les quarts');
+  ok(E.cluesShown(39, 40, 4) === 4 && E.cluesShown(99, 40, 4) === 4, 'jamais plus de quatre');
+
+  // les points : répondre au premier indice vaut le double
+  const jeu = niveau => {
+    const g = createGame({ chapters: [{ nb: 1, level: 2 }], duration: 40, points: 'simple' });
+    g.status = 'QUESTION'; g.qIndex = 0;
+    g.current = E.loadQuestion(r, g, {});
+    return g;
+  };
+  const g1 = jeu();
+  const pl = mkPlayers(2);
+  const ps = Object.keys(pl);
+  const res = E.doReveal(g1, pl, {
+    [ps[0]]: { a: g1.current.secret.correct, t: 5 },     // 1er indice
+    [ps[1]]: { a: g1.current.secret.correct, t: 35 },    // 4e indice
+  });
+  ok(res[ps[0]].pts === 2, 'trouvé au premier indice : ' + res[ps[0]].pts + ' points au lieu de 1');
+  ok(res[ps[1]].pts === 1, 'trouvé au dernier indice : ' + res[ps[1]].pts + ' point');
+
+  // une devinette difficile se tape au clavier, et les indices restent à part
+  const dur = E.loadQuestion(Object.assign({}, r, { difficulte: 5 }),
+    { level: 3, settings: E.normalizeSettings({ duration: 40, saisie: 'auto' }), chapIndex: 0 }, {});
+  ok(dur.type === 'SAISIE' && dur.clues.length === 4, 'en 5 ★ : on tape la réponse, avec les mêmes indices');
+
+  // sans indices écrits, la question reste jouable comme un QCM ordinaire
+  const vide = E.loadQuestion(Object.assign({}, r, { choix2: '' }),
+    { level: 1, settings: E.normalizeSettings({}), chapIndex: 0 }, {});
+  ok(!vide.devinette && vide.type === 'QCM', 'une devinette sans indice retombe sur un QCM');
+}
+
 /* ================= 5. Estimation, ordre, carte ================= */
 console.log('\n5. Correction des types de questions');
 {
@@ -390,6 +438,13 @@ console.log('\n8 bis. QCM partout, clavier seulement sur les plus dures');
   const ambigu = E.loadQuestion(Object.assign(q(2), { choix2: '', choix3: '', choix4: '' }),
     { level: 2, settings: E.normalizeSettings({ saisie: 'auto' }) }, memeTitre);
   ok(new Set(ambigu.choices).size === 4, 'deux fois le même titre : on réaffiche les artistes');
+
+  // une question sans pièges ne peut pas devenir un QCM à une seule case
+  const seul = E.loadQuestion({ id: 'S1', theme: 'T', difficulte: 1, type: 'QCM',
+    question: 'Qui a dit cela ?', reponse: 'Victor Hugo', choix2: '', choix3: '', choix4: '' },
+    { level: 1, settings: E.normalizeSettings({ saisie: 'auto' }), chapIndex: 0 }, {});
+  ok(seul.type === 'SAISIE' && !seul.choices, 'faute de mauvaises réponses, on tape la réponse plutôt que d\'offrir la question');
+  ok(seul.initiale === 'V', 'avec l\'initiale en indice');
 
   const jamais = E.loadQuestion(q(5), { level: 5, settings: E.normalizeSettings({ saisie: 'jamais' }) }, {});
   ok(jamais.type === 'QCM', 'le maître du jeu peut désactiver la saisie');

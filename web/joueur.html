@@ -346,6 +346,7 @@ function render(v, answered) {
              ${canJoker ? '<button class="btn small" id="joker">🃏 50/50</button>' : ''}</div>
            ${q.media && q.media.kind === 'image' ? mediaHtml(q, true, { start: q.start, duration: v.duration }) : ''}
            <div class="qtext">${esc(q.text)}</div>
+           ${cluesHtml(q)}
            ${boutonReecoute(v)}</div>` + answerUi(q, jokerHide(v));
         bindAnswerUi(q, v);
         brancherSon();
@@ -379,6 +380,7 @@ function render(v, answered) {
         </div>
         ${notes.map(n => `<div class="banner">${n}</div>`).join('')}
         ${carte ? '<div id="pmap" class="qmap" style="height:36vh"></div>' : ''}
+        ${cluesHtml(q)}
         <div class="card"><div class="muted" style="font-size:13px">La réponse</div>
           <div class="qtext">${esc(v.reveal.answerText)}</div>
           ${v.reveal.answerMore ? `<div class="muted" style="font-size:13px">${esc(v.reveal.answerMore)}</div>` : ''}
@@ -566,6 +568,7 @@ function timerHtml() {
 
 setInterval(() => {
   const v = S.view;
+  majIndices(v);                       // les indices tombent aussi pendant la révélation
   if (v && v.status === 'INTRO') {
     const c = $('#icount');
     const left = introLeft(v);

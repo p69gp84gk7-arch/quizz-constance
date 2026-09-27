@@ -273,7 +273,9 @@ console.log('\n3 bis. Pause du chrono et correction après coup');
   ok(live.duration === 12, 'chapitre 2 : le chrono passe à 12 s');
   ok(live.points === 'simple', 'chapitre 2 : les points passent en mode simple');
   const q2 = db.rows('game_mj')[0].state.current;
-  ok(q2.media === null || !q2.media || q2.media.dur === 12, 'un extrait suivrait aussi le chrono du chapitre');
+  // seul un extrait sonore cale sa durée sur le chrono ; une photo garde la sienne
+  const sonore = q2.media && (q2.media.kind === 'youtube' || q2.media.kind === 'audio');
+  ok(!sonore || q2.media.dur === 12, 'un extrait sonore suit aussi le chrono du chapitre');
 }
 
 /* ================= 4. Présence et reprise ================= */

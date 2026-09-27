@@ -1,6 +1,6 @@
 /* ================== Maître du jeu : préparation, questions, classement ================== */
 
-const ALL_TYPES = ['QCM', 'VF', 'ESTIMATION', 'ORDRE', 'CARTE'];
+const ALL_TYPES = ['QCM', 'VF', 'ESTIMATION', 'ORDRE', 'CARTE', 'INDICE'];
 
 /**
  * Les règles qu'un chapitre porte lui-même : chaque chapitre est une mini-partie,
@@ -781,6 +781,13 @@ function answerFields() {
       <div><label class="lbl">Bonne réponse (nombre)</label><input type="text" id="f-rep" inputmode="decimal"></div>
       <div><label class="lbl">Unité (facultatif)</label><input type="text" id="f-c2" placeholder="km, ans, €…"></div>
       <div><label class="lbl">Tolérance ± (vide = marge % de la partie)</label><input type="text" id="f-c3" inputmode="decimal"></div></div>`;
+  else if (t === 'INDICE') box.innerHTML = `<div class="grid2">
+      <div style="grid-column: span 2"><label class="lbl" style="color:var(--ok)">✔ Réponse (la personne, le lieu, le film…)</label><input type="text" id="f-rep"></div>
+      <div><label class="lbl">✘ Mauvaise réponse 1 (si QCM)</label><input type="text" id="f-c3"></div>
+      <div><label class="lbl">✘ Mauvaise réponse 2 (si QCM)</label><input type="text" id="f-c4"></div></div>
+      <div><label class="lbl">Les 4 indices, du plus vague au plus parlant</label>
+      ${[1, 2, 3, 4].map(n => `<input type="text" class="f-ind" placeholder="Indice ${n}" style="margin-bottom:6px">`).join('')}</div>
+      <div class="muted" style="font-size:13px">Ils se découvrent un par un pendant le chrono. Trouver au premier indice rapporte le double de points.</div>`;
   else box.innerHTML = `<div><label class="lbl">Éléments dans le BON ordre (3 à 6)</label>
       ${[1, 2, 3, 4, 5, 6].map(n => `<input type="text" class="f-ord" placeholder="${n}." style="margin-bottom:6px">`).join('')}</div>
       <div><label class="lbl">Consigne</label><input type="text" id="f-c2" placeholder="ex. Du plus ancien au plus récent"></div>`;
@@ -797,6 +804,11 @@ function saveQuestion() {
   if (q.type === 'ORDRE') {
     q.rep = Array.from(document.querySelectorAll('.f-ord')).map(i => i.value.trim()).filter(Boolean).join(' | ');
     q.c2 = val('f-c2');
+  } else if (q.type === 'INDICE') {
+    // les quatre indices tiennent dans « choix2 », séparés par une barre verticale
+    q.rep = val('f-rep');
+    q.c2 = Array.from(document.querySelectorAll('.f-ind')).map(i => i.value.trim()).filter(Boolean).join(' | ');
+    q.c3 = val('f-c3'); q.c4 = val('f-c4');
   } else {
     q.rep = val('f-rep'); q.c2 = val('f-c2'); q.c3 = val('f-c3'); q.c4 = val('f-c4');
   }

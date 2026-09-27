@@ -280,7 +280,7 @@ function render(v) {
       app.innerHTML = topBar(v) + `<div class="main fade-in${carte ? ' mapmode' : ''}">
           ${duelHtml(v)}
           ${carte ? '' : mediaHtml(q, true, live ? { start: q.start, duration: v.duration } : null)}
-          <div class="q">${esc(q.text)}</div>${body}</div>
+          <div class="q">${esc(q.text)}</div>${cluesHtml(q)}${body}</div>
         <div class="row">${live ? ringHtml() : '<span class="pill">🎤 Écoutez la question…</span>'}
           ${carte ? '<span class="pill">📍 Placez le point sur votre téléphone</span>' : ''}
           <span class="spacer"></span>${live ? `<span class="pill" style="font-size:1.2em">📨 <span id="answered">${v.answeredCount || 0} / ${v.playerCount}</span></span>` : ''}</div>
@@ -312,7 +312,7 @@ function render(v) {
               : '<div class="center muted">Personne n\'a placé de point</div>'}
             ${r.expl ? `<div class="card fade-in" style="font-size:.8em;padding:.8em 1em">💡 ${esc(r.expl)}</div>` : ''}</div></div>`;
       } else {
-        body = choicesHtml(q, r);
+        body = cluesHtml(q) + choicesHtml(q, r);
       }
       const banner = [];
       if (r.winner && v.format === 'buzzer') banner.push(`⚡ ${esc(r.winner)} a été le plus rapide !`);
@@ -372,6 +372,7 @@ function rankExtra(v, p) {
 /* Chrono circulaire + tic-tac des 5 dernières secondes */
 setInterval(() => {
   const v = S.view;
+  majIndices(v);
   if (v && v.status === 'INTRO') {
     const left = introLeft(v);
     const c = $('#icount');

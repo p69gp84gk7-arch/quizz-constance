@@ -180,7 +180,12 @@ function createDb(url, serviceKey, opts) {
  */
 
 const EPOQUES = ['Avant 1970', 'Années 70', 'Années 80', 'Années 90', 'Années 2000', 'Années 2010', 'Années 2020'];
-const TYPES = ['QCM', 'VF', 'ESTIMATION', 'ORDRE', 'CARTE'];
+const TYPES = ['QCM', 'VF', 'ESTIMATION', 'ORDRE', 'CARTE', 'INDICE'];
+
+/** Devinette : les quatre indices se découvrent l'un après l'autre pendant le chrono. */
+const NB_INDICES = 4;
+/** Ce que rapporte une bonne réponse selon le nombre d'indices déjà lus. */
+const BONUS_INDICE = [2, 1.6, 1.3, 1];
 const FORMATS = ['classique', 'face', 'survie', 'equipes', 'buzzer'];
 const TEAM_NAMES = ['🔴 Rouges', '🔵 Bleus', '🟢 Verts', '🟡 Jaunes'];
 const LIVE = ['INTRO', 'READ', 'QUESTION'];
@@ -224,7 +229,7 @@ const clamp = (v, a, b, d) => { v = Number(v); return isNaN(v) ? d : Math.max(a,
 
 /** Réglages qu'un chapitre peut redéfinir pour lui seul. */
 const REGLES_CHAPITRE = ['duration', 'points', 'estimation', 'margePct', 'estimQcm', 'choix',
-  'saisie', 'saisieNiveau', 'joker', 'bonus', 'autoReveal'];
+  'pieges', 'saisie', 'saisieNiveau', 'joker', 'bonus', 'autoReveal'];
 
 function normalizeSettings(s) {
   s = s || {};
@@ -258,7 +263,7 @@ function normalizeSettings(s) {
     chapters: chapters,
     duration: clamp(s.duration, 10, 120, 30),
     maxPlayers: clamp(s.maxPlayers, 2, 15, 15),
-    points: ['simple', 'rapidite', 'series'].indexOf(s.points) >= 0 ? s.points : 'rapidite',
+    points: POINTS.indexOf(s.points) >= 0 ? s.points : 'rapidite',
     estimation: s.estimation === 'proche' ? 'proche' : 'marge',
     margePct: clamp(s.margePct, 1, 50, 10),
     visual: String(s.visual || 'plateau'),
@@ -269,6 +274,9 @@ function normalizeSettings(s) {
     chrono: 'auto', // le chrono démarre toujours seul à la fin du compte à rebours
     autoReveal: s.autoReveal !== false,
     choix: s.choix === 'fixes' ? 'fixes' : 'adaptatifs',
+    // Des propositions qui se ressemblent rendent une question facile difficile :
+    // « auto » suit le niveau, « proches » piège tout le monde, « nets » laisse respirer.
+    pieges: ['auto', 'nets', 'proches'].indexOf(s.pieges) >= 0 ? s.pieges : 'auto',
     // « auto » : QCM aux niveaux faciles, saisie au clavier quand la difficulté monte
     estimQcm: ['libre', 'qcm', 'mixte', 'auto'].indexOf(s.estimQcm) >= 0 ? s.estimQcm : 'auto',
     saisie: ['auto', 'jamais', 'toujours'].indexOf(s.saisie) >= 0 ? s.saisie : 'auto',
@@ -300,7 +308,8 @@ function rules(st) {
   out.margePct = clamp(out.margePct, 1, 50, s.margePct);
   out.saisieNiveau = clamp(out.saisieNiveau, 2, 5, s.saisieNiveau);
   if (out.choix !== 'fixes' && out.choix !== 'adaptatifs') out.choix = s.choix;
-  if (['simple', 'rapidite', 'series'].indexOf(out.points) < 0) out.points = s.points;
+  if (['auto', 'nets', 'proches'].indexOf(out.pieges) < 0) out.pieges = s.pieges;
+  if (POINTS.indexOf(out.points) < 0) out.points = s.points;
   if (['libre', 'qcm', 'mixte', 'auto'].indexOf(out.estimQcm) < 0) out.estimQcm = s.estimQcm;
   if (['auto', 'jamais', 'toujours'].indexOf(out.saisie) < 0) out.saisie = s.saisie;
   if (out.estimation !== 'proche' && out.estimation !== 'marge') out.estimation = s.estimation;
@@ -581,6 +590,17 @@ function shortenChoices(q, rep) {
   return true;
 }
 
+/**
+ * Combien d'indices étaient affichés au bout de `t` secondes. Le premier est là
+ * dès le départ, les suivants arrivent à intervalle régulier sur le chrono :
+ * répondre au premier indice rapporte le double.
+ */
+function cluesShown(t, duration, nb) {
+  const n = nb || NB_INDICES;
+  const pas = Math.max(1, duration) / n;
+  return Math.max(1, Math.min(n, 1 + Math.floor((Number(t) || 0) / pas)));
+}
+
 /** Une réponse est-elle raisonnablement « tapable » ? (ni liste, ni phrase entière) */
 function typable(rep) {
   const r = String(rep || '').trim();
@@ -741,6 +761,12 @@ function loadQuestion(r, st, families) {
     q.secret.order = items;
     q.answerText = items.join(' → ');
   } else {
+    // Devinette : « Qui suis-je ? » avec quatre indices, du plus vague au plus parlant.
+    // Elle se joue ensuite exactement comme les autres : QCM en facile, clavier en difficile.
+    if (type === 'INDICE') {
+      q.clues = String(r.choix2 || '').split('|').map(x => x.trim()).filter(Boolean).slice(0, NB_INDICES);
+      q.devinette = q.clues.length > 0;
+    }
     q.type = 'QCM';
     q.answerText = rep;
     // Ce que la question demande vraiment : « Quel est ce titre ? » attend le titre,
@@ -768,13 +794,26 @@ function loadQuestion(r, st, families) {
         q.initiale = cible.charAt(0).toUpperCase();
       }
     } else {
-      const fixed = [r.choix2, r.choix3, r.choix4].map(x => String(x == null ? '' : x).trim()).filter(x => x && x !== rep);
+      const brut = q.devinette ? [r.choix3, r.choix4] : [r.choix2, r.choix3, r.choix4];
+      const fixed = brut.map(x => String(x == null ? '' : x).trim()).filter(x => x && x !== rep);
       let wrong = fixed;
       const fam = st && reg.choix === 'adaptatifs' && families ? families[q.theme + '|' + q.text] : null;
-      if (fam) wrong = adaptiveDistractors(rep, fixed, fam, q.cat, q.epoque, level);
+      // « proches » : des pièges serrés même sur une question facile ; « nets » : l'inverse
+      const nivPiege = reg.pieges === 'proches' ? 5 : reg.pieges === 'nets' ? 1 : level;
+      if (fam) wrong = adaptiveDistractors(rep, fixed, fam, q.cat, q.epoque, nivPiege);
       q.choices = shuffle([rep].concat(wrong.slice(0, 3)));
       q.secret.correct = q.choices.indexOf(rep);
-      if (court) shortenChoices(q, rep);
+      // Un QCM d'une seule proposition serait offert : faute de pièges, on fait
+      // taper la réponse. Cela n'arrive que si la banque est incomplète.
+      if (q.choices.length < 3 && typable(cible)) {
+        q.type = 'SAISIE';
+        q.choices = null;
+        q.secret.correct = -1;
+        q.secret.formes = acceptedForms(rep, q.text);
+        if (court) { q.answerText = cible; q.answerMore = rep; }
+        q.lettres = cible.replace(/[^A-Za-zÀ-ÿ0-9]/g, '').length;
+        q.initiale = cible.charAt(0).toUpperCase();
+      } else if (court) shortenChoices(q, rep);
     }
   }
   return q;
@@ -907,14 +946,26 @@ function smallestTeam(st, players) {
 /* Correction, points et difficulté                                    */
 /* ------------------------------------------------------------------ */
 
+/** Les systèmes de points proposés au maître du jeu. */
+const POINTS = ['simple', 'simple_bonus', 'paliers', 'difficulte', 'rapidite', 'series'];
+
+/**
+ * Points d'une bonne réponse. Les systèmes qui dépendent du classement des
+ * joueurs (bonus au plus rapide, podium) rendent ici leur valeur de base :
+ * le supplément est ajouté par doReveal, qui seul connaît tout le monde.
+ */
 function points(s, diff, t, streak) {
-  if (s.points === 'simple') return 1;
+  if (s.points === 'simple' || s.points === 'simple_bonus' || s.points === 'paliers') return 1;
   const base = 100 * diff;
+  if (s.points === 'difficulte') return base;          // la vitesse ne compte pas
   const speed = Math.max(0, 1 - (t || 0) / s.duration);
   let pts = base + Math.round(base * 0.5 * speed);
   if (s.points === 'series' && streak >= 3) pts += Math.min(200, 50 * (streak - 2));
   return pts;
 }
+
+/** Le podium des points « paliers » : 5 points au premier, puis 3, 2, 1. */
+const PALIERS = [5, 3, 2, 1];
 
 /**
  * Corrige la question en cours. `players` = { pid: joueur }, `answers` = { pid: {a, t} }.
@@ -979,10 +1030,23 @@ function doReveal(st, players, answers) {
     if (plays(p) && ans && (ok || (q.type === 'CARTE' && f > 0))) {
       const base = points(s, q.diff, ans.t, ok ? (pl.streak || 0) + 1 : 0);
       pts = q.type === 'CARTE' ? (s.points === 'simple' ? (ok ? 1 : 0) : Math.round(base * f)) : base;
+      // Devinette : trouver dès le premier indice vaut le double
+      if (q.clues && q.clues.length && ok) {
+        const lus = cluesShown(ans.t, s.duration, q.clues.length);
+        pts = Math.round(pts * BONUS_INDICE[lus - 1]);
+      }
       pts *= mult;
     }
     results[p] = { ok: ok, pts: pts, a: txt, t: ans ? ans.t : null, answered: !!ans, f: f, km: km, spect: !plays(p) };
   });
+
+  // 1 bis. Systèmes qui comparent les joueurs entre eux : bonus au plus rapide, podium
+  if (s.points === 'simple_bonus' || s.points === 'paliers') {
+    const ordre = inPlay.filter(p => results[p].ok && answers[p] && results[p].t !== null)
+      .sort((x, y) => results[x].t - results[y].t);
+    if (s.points === 'simple_bonus') { if (ordre[0]) results[ordre[0]].pts += mult; }
+    else ordre.forEach((p, i) => { if (PALIERS[i]) results[p].pts = PALIERS[i] * mult; });
+  }
 
   // 2. Règles du format
   let winner = null;
@@ -1135,6 +1199,7 @@ function publicQuestion(q) {
     id: q.id, type: q.type, text: q.text, theme: q.theme, cat: q.cat, diff: q.diff,
     choices: q.choices || null, unit: q.unit || '', items: q.items || null, hint: q.hint || '',
     lettres: q.lettres || null, initiale: q.initiale || '', attente: q.attente || '',
+    clues: q.clues && q.clues.length ? q.clues : null,
     media: q.media, start: q.start || null, epoque: q.epoque || '', zone: q.zone || null,
     mult: q.mult || 1, gold: !!q.gold,
   };
@@ -1960,6 +2025,23 @@ function createActions(db) {
         return { ok: true, t: t };
       }
 
+      /**
+       * Le joueur note la difficulté de la question qu'il vient de jouer (1 à 5
+       * étoiles). Ces avis corrigent « difficulte_mesuree » à la fin de la partie :
+       * une question notée 2 ★ que tout le monde trouve infernale remonte.
+       */
+      case 'playerRate': {
+        const pid = checkPid(p.pid);
+        const note = Math.round(Number(p.note));
+        if (!(note >= 1 && note <= 5)) return { ok: false, msg: 'Note entre 1 et 5 étoiles.' };
+        const qi = Number(p.qIndex);
+        if (!(qi >= 0)) return { ok: false, msg: 'Question inconnue.' };
+        const r = await db.from('answers').update({ note: note })
+          .eq('game_code', String(p.code || '').toUpperCase()).eq('pid', pid).eq('q_index', qi);
+        if (r.error) return { ok: false, msg: r.error.message };
+        return { ok: true, note: note };
+      }
+
       /** Joker 50/50 : retire deux mauvaises réponses (une fois par partie). */
       case 'playerJoker': {
         const pid = checkPid(p.pid);
@@ -2037,7 +2119,7 @@ function createActions(db) {
 
 
 /** Version du serveur : renvoyée par l'action « time », pour vérifier ce qui est déployé. */
-const BUILD = '2026-09-25-d1c43f';
+const BUILD = '2026-09-27-5b4c74';
 
 const db = createDb(
   Deno.env.get('SUPABASE_URL') ?? '',

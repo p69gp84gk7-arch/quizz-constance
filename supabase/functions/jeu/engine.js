@@ -10,7 +10,12 @@
  */
 
 export const EPOQUES = ['Avant 1970', 'Années 70', 'Années 80', 'Années 90', 'Années 2000', 'Années 2010', 'Années 2020'];
-export const TYPES = ['QCM', 'VF', 'ESTIMATION', 'ORDRE', 'CARTE'];
+export const TYPES = ['QCM', 'VF', 'ESTIMATION', 'ORDRE', 'CARTE', 'INDICE'];
+
+/** Devinette : les quatre indices se découvrent l'un après l'autre pendant le chrono. */
+export const NB_INDICES = 4;
+/** Ce que rapporte une bonne réponse selon le nombre d'indices déjà lus. */
+export const BONUS_INDICE = [2, 1.6, 1.3, 1];
 export const FORMATS = ['classique', 'face', 'survie', 'equipes', 'buzzer'];
 export const TEAM_NAMES = ['🔴 Rouges', '🔵 Bleus', '🟢 Verts', '🟡 Jaunes'];
 export const LIVE = ['INTRO', 'READ', 'QUESTION'];
@@ -415,6 +420,17 @@ export function shortenChoices(q, rep) {
   return true;
 }
 
+/**
+ * Combien d'indices étaient affichés au bout de `t` secondes. Le premier est là
+ * dès le départ, les suivants arrivent à intervalle régulier sur le chrono :
+ * répondre au premier indice rapporte le double.
+ */
+export function cluesShown(t, duration, nb) {
+  const n = nb || NB_INDICES;
+  const pas = Math.max(1, duration) / n;
+  return Math.max(1, Math.min(n, 1 + Math.floor((Number(t) || 0) / pas)));
+}
+
 /** Une réponse est-elle raisonnablement « tapable » ? (ni liste, ni phrase entière) */
 export function typable(rep) {
   const r = String(rep || '').trim();
@@ -575,6 +591,12 @@ export function loadQuestion(r, st, families) {
     q.secret.order = items;
     q.answerText = items.join(' → ');
   } else {
+    // Devinette : « Qui suis-je ? » avec quatre indices, du plus vague au plus parlant.
+    // Elle se joue ensuite exactement comme les autres : QCM en facile, clavier en difficile.
+    if (type === 'INDICE') {
+      q.clues = String(r.choix2 || '').split('|').map(x => x.trim()).filter(Boolean).slice(0, NB_INDICES);
+      q.devinette = q.clues.length > 0;
+    }
     q.type = 'QCM';
     q.answerText = rep;
     // Ce que la question demande vraiment : « Quel est ce titre ? » attend le titre,
@@ -602,7 +624,8 @@ export function loadQuestion(r, st, families) {
         q.initiale = cible.charAt(0).toUpperCase();
       }
     } else {
-      const fixed = [r.choix2, r.choix3, r.choix4].map(x => String(x == null ? '' : x).trim()).filter(x => x && x !== rep);
+      const brut = q.devinette ? [r.choix3, r.choix4] : [r.choix2, r.choix3, r.choix4];
+      const fixed = brut.map(x => String(x == null ? '' : x).trim()).filter(x => x && x !== rep);
       let wrong = fixed;
       const fam = st && reg.choix === 'adaptatifs' && families ? families[q.theme + '|' + q.text] : null;
       // « proches » : des pièges serrés même sur une question facile ; « nets » : l'inverse
@@ -610,7 +633,17 @@ export function loadQuestion(r, st, families) {
       if (fam) wrong = adaptiveDistractors(rep, fixed, fam, q.cat, q.epoque, nivPiege);
       q.choices = shuffle([rep].concat(wrong.slice(0, 3)));
       q.secret.correct = q.choices.indexOf(rep);
-      if (court) shortenChoices(q, rep);
+      // Un QCM d'une seule proposition serait offert : faute de pièges, on fait
+      // taper la réponse. Cela n'arrive que si la banque est incomplète.
+      if (q.choices.length < 3 && typable(cible)) {
+        q.type = 'SAISIE';
+        q.choices = null;
+        q.secret.correct = -1;
+        q.secret.formes = acceptedForms(rep, q.text);
+        if (court) { q.answerText = cible; q.answerMore = rep; }
+        q.lettres = cible.replace(/[^A-Za-zÀ-ÿ0-9]/g, '').length;
+        q.initiale = cible.charAt(0).toUpperCase();
+      } else if (court) shortenChoices(q, rep);
     }
   }
   return q;
@@ -827,6 +860,11 @@ export function doReveal(st, players, answers) {
     if (plays(p) && ans && (ok || (q.type === 'CARTE' && f > 0))) {
       const base = points(s, q.diff, ans.t, ok ? (pl.streak || 0) + 1 : 0);
       pts = q.type === 'CARTE' ? (s.points === 'simple' ? (ok ? 1 : 0) : Math.round(base * f)) : base;
+      // Devinette : trouver dès le premier indice vaut le double
+      if (q.clues && q.clues.length && ok) {
+        const lus = cluesShown(ans.t, s.duration, q.clues.length);
+        pts = Math.round(pts * BONUS_INDICE[lus - 1]);
+      }
       pts *= mult;
     }
     results[p] = { ok: ok, pts: pts, a: txt, t: ans ? ans.t : null, answered: !!ans, f: f, km: km, spect: !plays(p) };
@@ -991,6 +1029,7 @@ export function publicQuestion(q) {
     id: q.id, type: q.type, text: q.text, theme: q.theme, cat: q.cat, diff: q.diff,
     choices: q.choices || null, unit: q.unit || '', items: q.items || null, hint: q.hint || '',
     lettres: q.lettres || null, initiale: q.initiale || '', attente: q.attente || '',
+    clues: q.clues && q.clues.length ? q.clues : null,
     media: q.media, start: q.start || null, epoque: q.epoque || '', zone: q.zone || null,
     mult: q.mult || 1, gold: !!q.gold,
   };

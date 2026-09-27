@@ -333,6 +333,37 @@ const MediaSync = {
   },
 };
 
+/* ---------- Devinette : les indices se découvrent un par un ---------- */
+/**
+ * Les quatre indices sont envoyés dès le départ mais restent floutés : chacun
+ * se découvre à son tour pendant le chrono. Répondre au premier indice rapporte
+ * le double de points, d'où l'intérêt de se lancer tôt.
+ */
+function cluesHtml(q, tout) {
+  if (!q || !q.clues || !q.clues.length) return '';
+  // `tout` : côté maître du jeu, les quatre indices sont lisibles d'emblée — c'est lui qui les lit.
+  return `<div class="clues${tout ? ' clues-all' : ''}">${q.clues.map((c, i) =>
+    `<div class="clue${tout ? '' : ' locked'}" data-clue="${i}"><b>${i + 1}</b><span>${esc(c)}</span></div>`).join('')}</div>`;
+}
+
+/** Combien d'indices sont lisibles à cet instant (même calcul que le serveur). */
+function cluesShown(v) {
+  const q = v && v.question;
+  if (!q || !q.clues || !q.clues.length) return 0;
+  if (v.status !== 'QUESTION' && v.status !== 'READ') return q.clues.length;   // à la révélation, tout est lisible
+  const duree = v.duration || 30;
+  const ecoule = duree - Clock.remaining(q.start, duree, v);
+  return Math.max(1, Math.min(q.clues.length, 1 + Math.floor(ecoule / (duree / q.clues.length))));
+}
+
+/** Appelé par la boucle d'horloge de chaque page : dévoile les indices à l'heure. */
+function majIndices(v) {
+  const els = document.querySelectorAll('.clues:not(.clues-all) .clue');
+  if (!els.length) return;
+  const lus = cluesShown(v);
+  els.forEach((el, i) => el.classList.toggle('locked', i >= lus));
+}
+
 /* ---------- Intro (thème + compte à rebours) ---------- */
 /** Passe localement de l'intro à la question dès la fin du compte à rebours, sans attendre le serveur. */
 function localPromote(v) {
@@ -368,7 +399,8 @@ function levelStars(n) {
 }
 
 function typeLabel(t) {
-  return { QCM: 'QCM', VF: 'Vrai ou faux', ESTIMATION: 'Estimation', ORDRE: 'Remettre dans l\'ordre', CARTE: '📍 Carte' }[t] || t;
+  return { QCM: 'QCM', VF: 'Vrai ou faux', ESTIMATION: 'Estimation', ORDRE: 'Remettre dans l\'ordre',
+    CARTE: '📍 Carte', INDICE: '🕵️ Devinette' }[t] || t;
 }
 
 const FORMAT_LABELS = { classique: 'Classique', face: '⚔️ Face à face', survie: '💀 Survie', equipes: '👥 Équipes', buzzer: '⚡ Le plus rapide' };

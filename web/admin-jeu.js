@@ -320,6 +320,7 @@ function mainCard(v) {
     ${multBadge(q) ? `<div>${multBadge(q)}</div>` : ''}
     ${banners.map(b => `<div class="hint-box" style="border-style:solid">${b}</div>`).join('')}
     <div class="qbig">${esc(q.text)}</div>
+    ${cluesHtml(q, true)}
     ${q.hint ? `<div class="muted">Consigne : ${esc(q.hint)}</div>` : ''}
     <div class="answer-box"><div class="lbl2">Réponse${q.attente ? ' — ' + esc(q.attente) : ''}</div><div style="font-size:20px;font-weight:800">${esc(q.answerText)}</div>
       ${q.answerMore ? `<div class="muted" style="font-size:13px">${esc(q.answerMore)}</div>` : ''}
@@ -544,6 +545,7 @@ function kick(pid, name) {
 
 setInterval(() => {
   const v = A.view;
+  majIndices(v);
   if (v && v.status === 'INTRO') {
     const el = $('#aintro');
     if (el) el.textContent = introLeft(v);

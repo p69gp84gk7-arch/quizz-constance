@@ -179,3 +179,14 @@ table.tbl td.num, table.tbl th.num { text-align: right; font-variant-numeric: ta
 
 /* Étoiles de notation de la difficulté, sur le téléphone du joueur */
 .btn.note { padding: 8px 14px; font-size: 22px; line-height: 1; min-width: 46px; }
+
+/* Devinette : les indices se découvrent un par un, les suivants restent flous */
+.clues { display: grid; gap: 6px; margin-top: 8px; }
+.clue { display: grid; grid-template-columns: 24px 1fr; gap: 8px; align-items: baseline;
+  padding: 8px 10px; border: 1px solid var(--card-border); border-radius: 10px; }
+.clue b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-text); font-size: 12px; }
+.clue.locked { opacity: .6; }
+.clue.locked b { background: var(--card-border); color: var(--muted); }
+.clue.locked span { filter: blur(7px); user-select: none; }
+.clue span { transition: filter .4s ease; }
