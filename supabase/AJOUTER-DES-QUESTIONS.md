@@ -27,6 +27,14 @@ Les questions déjà présentes ne sont jamais touchées : seules les nouvelles 
 
 Importez-les l'un après l'autre : l'ordre n'a pas d'importance.
 
+## Les devinettes : un script SQL d'abord
+
+Les devinettes utilisent un type de question que la base ne connaissait pas.
+**Avant** d'importer `questions-devinettes.csv`, passez une fois
+`supabase/maj-devinettes.sql` dans **SQL Editor** → **Run**.
+
+Sans lui, l'import échoue avec l'erreur **23514** (« contrainte violée »).
+
 ## Les devinettes, en détail
 
 Une devinette (`type = INDICE`) porte ses quatre indices dans la colonne **choix2**,

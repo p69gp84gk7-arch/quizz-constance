@@ -17,7 +17,7 @@ create table if not exists questions (
   theme         text not null,
   categorie     text default '',
   difficulte    int  not null default 1 check (difficulte between 1 and 5),
-  type          text not null default 'QCM' check (type in ('QCM','VF','ESTIMATION','ORDRE','CARTE')),
+  type          text not null default 'QCM' check (type in ('QCM','VF','ESTIMATION','ORDRE','CARTE','INDICE')),
   question      text not null,
   reponse       text not null,
   choix2        text default '',

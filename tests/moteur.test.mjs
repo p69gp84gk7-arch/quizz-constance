@@ -559,6 +559,38 @@ console.log('\n8 ter. Destination du son');
   ok(d('n\'importe quoi') === 'ecran', 'une valeur inconnue retombe sur l\'écran public');
 }
 
+/* ============ 8 septies. La base accepte-t-elle ce que le moteur produit ? ============ */
+console.log('\n8 septies. Accord entre le moteur et le schéma de la base');
+{
+  const schema = fs.readFileSync(path.join(ROOT, 'supabase/schema.sql'), 'utf8');
+  const maj = fs.readFileSync(path.join(ROOT, 'supabase/maj-devinettes.sql'), 'utf8');
+  const typesDe = texte => {
+    const m = texte.match(/type in \(([^)]*)\)/i);
+    return m ? m[1].split(',').map(x => x.trim().replace(/'/g, '')) : null;
+  };
+
+  const surTable = typesDe(schema);
+  ok(!!surTable, 'le schéma limite bien les types de questions');
+  E.TYPES.forEach(t => ok(surTable.indexOf(t) >= 0, 'la table questions accepte le type ' + t));
+
+  // la mise à jour doit dire la même chose : c'est elle que subit une base déjà installée
+  const surMaj = typesDe((maj.split('add constraint')[1] || ''));
+  ok(!!surMaj && E.TYPES.every(t => surMaj.indexOf(t) >= 0),
+    'maj-devinettes.sql autorise exactement les mêmes types');
+
+  // et aucun fichier livré ne doit utiliser un type refusé
+  const types = new Set();
+  ['questions', 'questions-repliques', 'questions-dates', 'questions-devinettes',
+    'questions-citations', 'questions-nouveaux-themes'].forEach(f => {
+    const chemin = path.join(ROOT, 'supabase/' + f + '.csv');
+    if (!fs.existsSync(chemin)) return;
+    parseCsv(fs.readFileSync(chemin, 'utf8')).forEach(r => { if (r.type) types.add(String(r.type).trim()); });
+  });
+  const inconnus = [...types].filter(t => surTable.indexOf(t) < 0);
+  ok(!inconnus.length, 'aucun CSV n\'utilise un type que la base refuserait'
+    + (inconnus.length ? ' : ' + inconnus.join(', ') : ''));
+}
+
 /* ================= 9. Pools : filtres de préparation ================= */
 console.log('\n9. Filtres de préparation');
 {
