@@ -5,7 +5,7 @@
 /** Version du serveur, renseignée au premier appel : sert à repérer un déploiement oublié. */
 let SERVER_BUILD = '?';
 
-const APP_VERSION = '2026-09-25-f';
+const APP_VERSION = '2026-09-27-a';
 
 const VISUALS = {
   plateau: 'Plateau TV', elegant: 'Élégant', pop: 'Pop', neon: 'Néon', nature: 'Nature', enfants: 'Enfants',
@@ -364,6 +364,21 @@ function majIndices(v) {
   els.forEach((el, i) => el.classList.toggle('locked', i >= lus));
 }
 
+/* ---------- Format « chacun son thème » ---------- */
+/**
+ * Le tableau des thèmes encore disponibles. `choisir` rend les cases cliquables
+ * (c'est le tour de ce joueur, ou c'est le maître du jeu qui choisit à sa place).
+ */
+function grilleHtml(v, choisir) {
+  if (!v.grille || !v.grille.length) return '';
+  return `<div class="grille">${v.grille.map(g => {
+    const mort = !g.reste;
+    return `<button class="theme-case${mort ? ' vide' : ''}" ${mort || !choisir ? 'disabled' : ''} data-theme="${g.idx}">
+      <span class="nom">${esc(g.name)}</span>
+      <span class="reste">${mort ? 'épuisé' : g.reste + ' question' + (g.reste > 1 ? 's' : '')}</span></button>`;
+  }).join('')}</div>`;
+}
+
 /* ---------- Intro (thème + compte à rebours) ---------- */
 /** Passe localement de l'intro à la question dès la fin du compte à rebours, sans attendre le serveur. */
 function localPromote(v) {
@@ -403,7 +418,8 @@ function typeLabel(t) {
     CARTE: '📍 Carte', INDICE: '🕵️ Devinette' }[t] || t;
 }
 
-const FORMAT_LABELS = { classique: 'Classique', face: '⚔️ Face à face', survie: '💀 Survie', equipes: '👥 Équipes', buzzer: '⚡ Le plus rapide' };
+const FORMAT_LABELS = { classique: 'Classique', face: '⚔️ Face à face', survie: '💀 Survie',
+  equipes: '👥 Équipes', buzzer: '⚡ Le plus rapide', themes: '🎯 Chacun son thème' };
 function hearts(n, max) { return '❤️'.repeat(Math.max(0, n || 0)) + '<span style="opacity:.25">🖤</span>'.repeat(Math.max(0, (max || 0) - (n || 0))); }
 function multBadge(q) {
   if (!q || !q.mult || q.mult < 2) return '';

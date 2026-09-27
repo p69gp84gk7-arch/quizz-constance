@@ -16,7 +16,7 @@ export const TYPES = ['QCM', 'VF', 'ESTIMATION', 'ORDRE', 'CARTE', 'INDICE'];
 export const NB_INDICES = 4;
 /** Ce que rapporte une bonne réponse selon le nombre d'indices déjà lus. */
 export const BONUS_INDICE = [2, 1.6, 1.3, 1];
-export const FORMATS = ['classique', 'face', 'survie', 'equipes', 'buzzer'];
+export const FORMATS = ['classique', 'face', 'survie', 'equipes', 'buzzer', 'themes'];
 export const TEAM_NAMES = ['🔴 Rouges', '🔵 Bleus', '🟢 Verts', '🟡 Jaunes'];
 export const LIVE = ['INTRO', 'READ', 'QUESTION'];
 export const INTRO_S = 5;      // compte à rebours avant chaque question
@@ -116,6 +116,9 @@ export function normalizeSettings(s) {
     saisieNiveau: clamp(s.saisieNiveau, 2, 5, 4.5),
     format: FORMATS.indexOf(s.format) >= 0 ? s.format : 'classique',
     lives: clamp(s.lives, 1, 5, 3),
+    // Chacun son thème : qui choisit, et perd-on une vie en se trompant ?
+    choixOrdre: s.choixOrdre === 'hasard' ? 'hasard' : 'points',
+    choixVies: s.choixVies !== false,
     teams: clamp(s.teams, 2, 4, 2),
     bonus: !!s.bonus,
     finale: !!s.finale,
@@ -660,6 +663,9 @@ export function newState(code, settings) {
     total: settings.chapters.reduce((a, c) => a + c.nb, 0),
     used: [], current: null, reveal: null, media: { seq: 0, action: 'stop' },
     pools: [], finished: false, persisted: false,
+    // « chacun son thème » : ce qui reste dans chaque thème, et à qui de choisir
+    restant: settings.format === 'themes' ? settings.chapters.map(c => c.nb) : null,
+    chooser: null, choisiPar: '',
   };
 }
 
@@ -773,6 +779,77 @@ export function smallestTeam(st, players) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Format « chacun son thème » : le tableau des thèmes disponibles      */
+/* ------------------------------------------------------------------ */
+
+/** Ce qui reste à jouer dans chaque thème proposé (un thème = un chapitre). */
+export function initRestant(st) {
+  st.restant = st.settings.chapters.map(c => c.nb);
+  return st.restant;
+}
+
+/** Le tableau tel que les écrans l'affichent : nom, questions restantes, épuisé ou non. */
+export function grille(st) {
+  const r = st.restant || [];
+  return st.settings.chapters.map((c, i) => ({
+    idx: i, name: c.name, reste: r[i] || 0, level: c.level,
+    themes: c.themes && c.themes.length ? c.themes : null,
+  }));
+}
+
+/** Reste-t-il au moins une question à choisir ? */
+export function resteAChoisir(st) {
+  return (st.restant || []).some(n => n > 0);
+}
+
+/**
+ * À qui de choisir ? Celui qui a le moins de points passe en premier — c'est
+ * ce qui rééquilibre la partie. À égalité, celui qui a le moins choisi jusque-là,
+ * puis le hasard. En mode « hasard », on tire au sort parmi ceux qui ont le
+ * moins choisi, pour que le tour passe quand même par tout le monde.
+ */
+export function prochainChoisisseur(st, players) {
+  const s = rules(st);
+  const vivants = Object.keys(players).filter(p => !(s.choixVies && players[p].out));
+  if (!vivants.length) return null;
+  const pris = p => players[p].choix || 0;
+  const mini = Math.min.apply(null, vivants.map(pris));
+  const candidats = vivants.filter(p => pris(p) === mini);
+  if (s.choixOrdre === 'hasard') return candidats[Math.floor(Math.random() * candidats.length)];
+  const score = p => players[p].score || 0;
+  const bas = Math.min.apply(null, candidats.map(score));
+  const derniers = candidats.filter(p => score(p) === bas);
+  return derniers[Math.floor(Math.random() * derniers.length)];
+}
+
+/** Ouvre l'écran de choix : le joueur désigné doit prendre un thème. */
+export function ouvrirChoix(st, players) {
+  const pid = prochainChoisisseur(st, players);
+  if (!pid) return false;
+  st.chooser = pid;
+  st.status = 'CHOIX';
+  st.current = null;
+  st.reveal = null;
+  st.media = { seq: st.media.seq + 1, action: 'stop' };
+  return true;
+}
+
+/** Le thème est choisi : on décompte, on note qui a choisi, on part sur la question. */
+export function prendreTheme(st, players, idx) {
+  const i = Number(idx);
+  if (!(i >= 0 && i < st.settings.chapters.length)) throw new Error('Ce thème n\'existe pas.');
+  if (!st.restant || !st.restant[i]) throw new Error('Ce thème est épuisé.');
+  st.restant[i]--;
+  st.chapIndex = i;
+  st.chapQ = 0;
+  st.level = st.settings.chapters[i].level;
+  if (st.chooser && players[st.chooser]) players[st.chooser].choix = (players[st.chooser].choix || 0) + 1;
+  st.choisiPar = st.chooser && players[st.chooser] ? players[st.chooser].pseudo : '';
+  st.chooser = null;
+  return i;
+}
+
+/* ------------------------------------------------------------------ */
 /* Correction, points et difficulté                                    */
 /* ------------------------------------------------------------------ */
 
@@ -811,7 +888,7 @@ export function doReveal(st, players, answers) {
 
   // Qui joue vraiment cette question ? (face à face : les 2 duellistes ; survie : les vivants)
   const plays = p => s.format === 'face' ? !!(q.duel && q.duel.indexOf(p) >= 0)
-    : s.format === 'survie' ? !players[p].out : true;
+    : (s.format === 'survie' || (s.format === 'themes' && s.choixVies)) ? !players[p].out : true;
   const inPlay = pids.filter(plays);
 
   // Estimation « le plus proche » : distance minimale parmi les joueurs en jeu
@@ -896,7 +973,7 @@ export function doReveal(st, players, answers) {
     if (winner) players[winner].duelWins = (players[winner].duelWins || 0) + 1;
   }
   let eliminated = [], repechage = false;
-  if (s.format === 'survie') {
+  if (s.format === 'survie' || (s.format === 'themes' && s.choixVies)) {
     const failed = inPlay.filter(p => !results[p].ok);
     // Si tous les survivants se trompent, personne ne perd de vie (repêchage)
     repechage = failed.length > 0 && failed.length === inPlay.length;
@@ -956,8 +1033,9 @@ export function doReveal(st, players, answers) {
     if (fast.length) top = Object.assign({ kind: 'rapide' }, fast[0]);
   }
 
-  const alive = s.format === 'survie' ? pids.filter(p => !players[p].out).length : null;
-  if (s.format === 'survie' && pids.length >= 2 && alive <= 1) st.finished = true;
+  const avecVies = s.format === 'survie' || (s.format === 'themes' && s.choixVies);
+  const alive = avecVies ? pids.filter(p => !players[p].out).length : null;
+  if (avecVies && pids.length >= 2 && alive <= 1) st.finished = true;
 
   st.reveal = {
     qIndex: st.qIndex, correct: q.secret.correct, answerText: q.answerText,
@@ -1055,9 +1133,14 @@ export function publicView(st, players, answers, pid) {
     // chrono : temps mort accumulé et pause en cours, pour que tous les écrans s'accordent
     pausedMs: pausedMs(st), paused: !!(st.current && st.current.pausedAt),
     format: s.format, lives: s.lives, joker: s.joker, finished: !!st.finished,
+    choisiPar: st.choisiPar || '',
     // règles du chapitre en cours, pour que les écrans n'aient pas à les recalculer
     autoReveal: s.autoReveal, bonus: !!s.bonus,
   };
+  if (s.format === 'themes') {
+    v.grille = grille(st);
+    v.chooser = st.chooser && players[st.chooser] ? players[st.chooser].pseudo : '';
+  }
   if (s.format === 'equipes') v.teams = teamRanking(st, players);
   if (s.format === 'survie') {
     v.survivors = Object.keys(players).filter(p => !players[p].out)
@@ -1100,6 +1183,7 @@ export function publicView(st, players, answers, pid) {
   if (pid && players[pid]) {
     const me = rk.filter(p => p.pid === pid)[0];
     v.me = {
+      choisir: st.chooser === pid,          // c'est à moi de prendre un thème
       pseudo: me.pseudo, score: me.score, rank: me.rank, good: me.good, streak: me.streak || 0,
       lives: me.lives, out: me.out || 0, team: me.team, jokerUsed: !!me.joker,
       spectator: s.format === 'face' && !!(st.current && st.current.duel) && st.current.duel.indexOf(pid) < 0,

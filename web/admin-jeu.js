@@ -350,6 +350,7 @@ function formatNote(v) {
     survie: ' — ' + v.lives + ' vie' + (v.lives > 1 ? 's' : '') + ' par joueur, le dernier survivant gagne.',
     equipes: ' — points d\'équipe = moyenne de ses joueurs.',
     buzzer: ' — seule la première bonne réponse marque.',
+    themes: ' — les chapitres deviennent un tableau de thèmes ; à tour de rôle, un joueur choisit celui de la question suivante.',
   }[v.format] || '';
 }
 
@@ -445,6 +446,8 @@ function bindMain(v) {
   const pa = primaryAction(v);
   if (p && pa && pa.fn) p.onclick = () => act(pa.fn);
   if (v.status === 'LOBBY' && window.QRCode && $('#qrbox')) new QRCode($('#qrbox'), { text: joinLink(v), width: A.qrSize || 200, height: A.qrSize || 200 });
+  // « chacun son thème » : le maître du jeu peut choisir à la place du joueur
+  document.querySelectorAll('[data-theme]').forEach(b => b.onclick = () => act('adminPick', { theme: Number(b.dataset.theme) }));
   bindSettings();
   if (v.current && ['INTRO', 'READ', 'QUESTION', 'REVEAL'].indexOf(v.status) >= 0) loadFiche(v);
   const el = $('#amap');

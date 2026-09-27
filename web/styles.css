@@ -190,3 +190,13 @@ table.tbl td.num, table.tbl th.num { text-align: right; font-variant-numeric: ta
 .clue.locked b { background: var(--card-border); color: var(--muted); }
 .clue.locked span { filter: blur(7px); user-select: none; }
 .clue span { transition: filter .4s ease; }
+
+/* Format « chacun son thème » : le tableau des thèmes à prendre */
+.grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; width: 100%; margin-top: 10px; }
+.theme-case { display: grid; gap: 4px; padding: 14px 12px; border-radius: 14px; cursor: pointer;
+  border: 2px solid var(--card-border); background: var(--card); color: inherit; font: inherit; text-align: center; }
+.theme-case:not(:disabled):hover { border-color: var(--accent); transform: translateY(-2px); }
+.theme-case .nom { font-family: var(--font-title); font-weight: 800; font-size: 17px; }
+.theme-case .reste { font-size: 13px; color: var(--muted); }
+.theme-case.vide { opacity: .35; text-decoration: line-through; }
+.theme-case:disabled { cursor: default; }

@@ -77,7 +77,7 @@ function refreshChapterNames(d) {
 function defaultDraft() {
   const d = Object.assign({
     title: 'Quizz', maxPlayers: 15, chrono: 'auto', visual: 'plateau', sounds: true, audioOn: 'ecran',
-    format: 'classique', lives: 3, teams: 2, finale: false,
+    format: 'classique', lives: 3, teams: 2, finale: false, choixOrdre: 'points', choixVies: true,
   }, REGLES_DEFAUT);
   d.chapters = [defaultChapter('Culture générale', 15, 1)];
   return propager(d);
@@ -103,6 +103,14 @@ const PRESETS = {
   '👥 Équipes': () => withFmt({ format: 'equipes', teams: 2, chapters: [
     defaultChapter('Manche 1', 8, 1), defaultChapter('Manche 2 · Blind test', 6, 1, { themes: ['Blind test musique', 'Blind test cinéma'] }), defaultChapter('Manche 3', 6, 3)] }),
   '⚡ Le plus rapide': () => withFmt({ format: 'buzzer', duration: 15, chapters: [defaultChapter('Le plus rapide', 15, 2)] }),
+  '🎯 Chacun son thème': () => withFmt({ format: 'themes', lives: 3, choixOrdre: 'points', chapters: [
+    defaultChapter('Cinéma', 4, 2, { themes: ['Cinéma'] }),
+    defaultChapter('Histoire', 4, 2, { themes: ['Histoire'] }),
+    defaultChapter('Géographie', 4, 2, { themes: ['Géographie'] }),
+    defaultChapter('Sciences', 4, 2, { themes: ['Sciences'] }),
+    defaultChapter('Musique', 4, 2, { themes: ['Musique'] }),
+    defaultChapter('Sport', 4, 2, { themes: ['Sport'] }),
+  ] }),
   '🌍 Tour du monde (cartes)': () => withFmt({ duration: 25, chapters: [defaultChapter('Tour du monde', 12, 1, { types: ['CARTE'] })] }),
   '📸 Que des photos': () => withFmt({ chapters: [defaultChapter('Photos', 15, 1, { media: 'photo' })] }),
   '🤪 Insolite': () => withFmt({ chapters: [defaultChapter('Insolite', 12, 1, { themes: ['Insolite'] })] }),
@@ -125,7 +133,8 @@ A.draft.chapters.forEach(c => {
 });
 // Ancien brouillon : les réglages étaient au-dessus, ils descendent dans les chapitres
 propager(A.draft);
-['format', 'lives', 'teams', 'bonus', 'finale', 'joker'].forEach(k => { if (A.draft[k] === undefined) A.draft[k] = defaultDraft()[k]; });
+['format', 'lives', 'teams', 'bonus', 'finale', 'joker', 'choixOrdre', 'choixVies']
+  .forEach(k => { if (A.draft[k] === undefined) A.draft[k] = defaultDraft()[k]; });
 function saveDraft() { store('qc_draft', JSON.stringify(A.draft)); }
 
 /* ---------------- Préparer une partie ---------------- */
@@ -209,8 +218,14 @@ function renderPreparer() {
       <div class="grid2">
         <div><label class="lbl">Format</label><select data-k="format" data-rerender>
           ${opt('classique', d.format, 'Classique : tout le monde joue')}${opt('face', d.format, '⚔️ Face à face : un duel par question')}${opt('survie', d.format, '💀 Survie : des vies, le dernier gagne')}
-          ${opt('equipes', d.format, '👥 Équipes')}${opt('buzzer', d.format, '⚡ Le plus rapide : seul le 1er marque')}</select></div>
-        ${d.format === 'survie' ? `<div><label class="lbl">Vies par joueur</label><select data-k="lives">${[1, 2, 3, 4, 5].map(n => opt(n, d.lives, '❤️'.repeat(n))).join('')}</select></div>` : ''}
+          ${opt('equipes', d.format, '👥 Équipes')}${opt('buzzer', d.format, '⚡ Le plus rapide : seul le 1er marque')}
+          ${opt('themes', d.format, '🎯 Chacun son thème')}</select></div>
+        ${d.format === 'themes' ? `<div><label class="lbl">Qui choisit le thème</label><select data-k="choixOrdre">
+          ${opt('points', d.choixOrdre, 'Celui qui a le moins de points')}${opt('hasard', d.choixOrdre, 'Au hasard, chacun son tour')}</select></div>
+        <div class="col" style="gap:6px;justify-content:flex-end">
+          <label class="switch"><input type="checkbox" data-k="choixVies" ${d.choixVies !== false ? 'checked' : ''}> 💔 Une mauvaise réponse coûte une vie</label>
+        </div>` : ''}
+        ${d.format === 'survie' || (d.format === 'themes' && d.choixVies !== false) ? `<div><label class="lbl">Vies par joueur</label><select data-k="lives">${[1, 2, 3, 4, 5].map(n => opt(n, d.lives, '❤️'.repeat(n))).join('')}</select></div>` : ''}
         ${d.format === 'equipes' ? `<div><label class="lbl">Nombre d'équipes</label><select data-k="teams">${[2, 3, 4].map(n => opt(n, d.teams, n + ' équipes')).join('')}</select></div>` : ''}
         <div class="col" style="gap:6px;justify-content:flex-end">
           <label class="switch"><input type="checkbox" data-k="finale" ${d.finale ? 'checked' : ''}> 🏁 Dernière question de la partie ×3</label>
@@ -222,6 +237,7 @@ function renderPreparer() {
         survie: 'Une mauvaise réponse (ou pas de réponse) coûte une vie. Si tous les survivants se trompent, personne ne perd de vie. Le dernier en vie gagne : prévois beaucoup de questions.',
         equipes: 'Les joueurs sont répartis au hasard (tu peux refaire le tirage dans la salle d\'attente). Points d\'équipe = moyenne de ses joueurs.',
         buzzer: 'Seul le joueur le plus rapide à donner la bonne réponse marque des points.',
+        themes: 'Chaque chapitre devient un thème à prendre dans un tableau. À tour de rôle, un joueur choisit le thème de la question suivante — celui qui a le moins de points passe en premier. La partie s\'arrête quand le tableau est vide (ou qu\'il ne reste qu\'un joueur en vie).',
       }[d.format]}</p>
     </div>
 
@@ -609,7 +625,7 @@ function randomQuiz() {
 function keepSettings() {
   const d = A.draft;
   const k = {};
-  ['title', 'visual', 'maxPlayers', 'sounds', 'audioOn', 'format', 'lives', 'teams', 'finale']
+  ['title', 'visual', 'maxPlayers', 'sounds', 'audioOn', 'format', 'lives', 'teams', 'finale', 'choixOrdre', 'choixVies']
     .concat(REGLES_CH).forEach(x => { k[x] = d[x]; });
   // et les règles du premier chapitre servent de modèle aux chapitres générés
   const r = (d.chapters[0] || {}).regles || {};

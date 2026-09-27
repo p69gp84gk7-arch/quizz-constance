@@ -7,7 +7,7 @@
 <title>Quizz</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&family=Playfair+Display:wght@600;800&family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=2026-09-25-f">
+<link rel="stylesheet" href="styles.css?v=2026-09-27-a">
 <style>
   body { min-height: 100vh; }
   .wrap { max-width: 560px; margin: 0 auto; padding: 14px 14px 40px; min-height: 100vh; display: flex; flex-direction: column; gap: 14px; }
@@ -41,8 +41,8 @@
 <div class="wrap" id="app"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="config.js?v=2026-09-25-f"></script>
-<script src="commun.js?v=2026-09-25-f"></script>
+<script src="config.js?v=2026-09-27-a"></script>
+<script src="commun.js?v=2026-09-27-a"></script>
 <script>
 /* Code de la partie : ?p=XXXX (QR code) ou saisi à la main. */
 const INIT_CODE = (new URLSearchParams(location.search).get('p') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -302,6 +302,23 @@ function render(v, answered) {
         ${bandeauSon(v)}</div>`;
       brancherSon();
       break;
+
+    case 'CHOIX': {
+      const amoi = v.me && v.me.choisir;
+      app.innerHTML = h + `<div class="hero pop-in" style="gap:10px">
+        <div class="big">🎯</div>
+        <h2>${amoi ? 'À toi de choisir !' : (v.chooser ? esc(v.chooser) + ' choisit…' : 'Choix du thème')}</h2>
+        <p class="muted">${amoi ? 'Prends le thème de la prochaine question.' : 'Regarde l\'écran.'}</p></div>
+        ${grilleHtml(v, amoi)}`;
+      if (amoi) {
+        document.querySelectorAll('[data-theme]').forEach(b => b.onclick = () => {
+          document.querySelectorAll('[data-theme]').forEach(x => { x.disabled = true; });
+          rpc('playerPick', { code: S.code, pid: S.pid, theme: Number(b.dataset.theme) })
+            .then(refresh).catch(e => { toast(e, true); refresh(); });
+        });
+      }
+      break;
+    }
 
     case 'CHAPTER':
       app.innerHTML = h + `<div class="hero pop-in"><div class="muted">Chapitre ${v.chapter.idx}/${v.chapter.count}</div>

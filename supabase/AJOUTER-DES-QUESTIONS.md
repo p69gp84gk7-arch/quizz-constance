@@ -21,8 +21,21 @@ Les questions déjà présentes ne sont jamais touchées : seules les nouvelles 
 | `questions-repliques.csv` | 58 répliques de film, thème Cinéma, catégorie Répliques |
 | `questions-blindtest.csv` | 105 extraits musicaux, thème Blind test musique |
 | `questions-dates.csv` | 73 questions de dates : « Que s'est-il passé en 1969 ? » et classements chronologiques |
+| `questions-devinettes.csv` | 65 devinettes à 4 indices (38 personnalités, des lieux, des films, des animaux) |
+| `questions-citations.csv` | 70 questions du thème « Citations & expressions » : proverbes à trou, phrases célèbres, sens d'expressions |
 
 Importez-les l'un après l'autre : l'ordre n'a pas d'importance.
+
+## Les devinettes, en détail
+
+Une devinette (`type = INDICE`) porte ses quatre indices dans la colonne **choix2**,
+séparés par une barre verticale : `indice 1 | indice 2 | indice 3 | indice 4`.
+Ils se découvrent l'un après l'autre pendant le chrono — trouver dès le premier
+rapporte le double de points. Les colonnes **choix3** et **choix4** servent de
+mauvaises réponses de secours quand la question se joue en QCM.
+
+On peut aussi en écrire une depuis l'interface : onglet **Questions**, type
+**🕵️ Devinette**, puis les quatre indices dans les cases prévues.
 
 ## En cas d'erreur « duplicate key »
 

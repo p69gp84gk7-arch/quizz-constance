@@ -18,7 +18,7 @@ export const ADMIN_ACTIONS = new Set([
   'adminShuffleTeams', 'adminCatalog', 'adminAddQuestion', 'adminMontages', 'adminSaveMontage',
   'adminDeleteMontage', 'adminLeaderboard', 'adminBlindList',
   'adminPause', 'adminResume', 'adminJudge', 'adminScore',
-  'adminDeleteParty', 'adminRenamePlayer', 'adminDeletePlayer',
+  'adminDeleteParty', 'adminRenamePlayer', 'adminDeletePlayer', 'adminPick',
 ]);
 
 export function createActions(db) {
@@ -333,6 +333,11 @@ export function createActions(db) {
           return E.adminView(st, players, {});
         } else if (st.finished) {
           await endGame(st, players);          // survie : il ne reste qu'un joueur
+        } else if (st.settings.format === 'themes') {
+          // Chacun son thème : après chaque question, c'est au tour d'un joueur de choisir
+          if (!st.restant) E.initRestant(st);
+          if (!E.resteAChoisir(st)) await endGame(st, players);
+          else if (!E.ouvrirChoix(st, players)) await endGame(st, players);
         } else {
           const ch = st.settings.chapters[st.chapIndex];
           const chapterDone = st.chapIndex < 0 || st.chapQ >= ch.nb;
@@ -361,6 +366,27 @@ export function createActions(db) {
         const players = await loadPlayers(st.code);
         if (st.status === 'READ' || (st.status === 'INTRO' && !st.current.start)) E.startTimer(st);
         return await publish(st, players, {});
+      }
+
+      /**
+       * Format « chacun son thème » : le joueur désigné prend un thème dans le
+       * tableau, et la question part aussitôt. Le maître du jeu peut choisir à sa
+       * place (joueur absent, téléphone à plat) avec la même action.
+       */
+      case 'playerPick':
+      case 'adminPick': {
+        const st = await loadGame(p.code);
+        const players = await loadPlayers(st.code);
+        if (st.status !== 'CHOIX') return { ok: false, msg: 'Ce n\'est pas le moment de choisir.' };
+        if (action === 'playerPick') {
+          const pid = E.checkPid(p.pid);
+          if (st.chooser !== pid) return { ok: false, msg: 'Ce n\'est pas à toi de choisir.' };
+        }
+        E.prendreTheme(st, players, p.theme);
+        await nextQuestion(st, players);
+        await savePlayers(st.code, players);
+        const v = await publish(st, players, {});
+        return action === 'playerPick' ? { ok: true } : v;
       }
 
       /** Met le chrono en pause : le temps s'arrête pour tout le monde, le son aussi. */

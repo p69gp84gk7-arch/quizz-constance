@@ -331,6 +331,57 @@ console.log('\n5. Chapitres et bascule de l\'écran');
   ok(scr.code === mj2.code && scr.code !== code, 'une nouvelle partie fait basculer l\'écran public tout seul');
 }
 
+/* ================= 4. bis Chacun son thème ================= */
+console.log('\n4 ter. Format « chacun son thème »');
+{
+  const { db, handle } = fresh();
+  const mj = await handle('adminCreateGame', { settings: {
+    format: 'themes', lives: 9, choixOrdre: 'points', duration: 30,
+    chapters: [
+      { name: 'Cinéma', nb: 2, level: 1, themes: ['Cinéma'], types: ['QCM'] },
+      { name: 'Sport', nb: 1, level: 1, themes: ['Sport'], types: ['QCM'] },
+    ] } });
+  const code = mj.code;
+  await handle('playerJoin', { code, pid: PIDS[0], pseudo: 'Constance' });
+  await handle('playerJoin', { code, pid: PIDS[1], pseudo: 'Paul' });
+
+  let v = await handle('adminNext', { code });
+  ok(v.status === 'CHOIX', 'la partie s\'ouvre sur le choix d\'un thème');
+  ok(v.grille.length === 2 && v.grille[0].reste === 2 && v.grille[1].reste === 1,
+    'le tableau annonce ce qui reste : ' + v.grille.map(g => g.name + ' (' + g.reste + ')').join(', '));
+  ok(!!v.chooser, 'un joueur est désigné : ' + v.chooser);
+
+  const chooser = db.rows('games')[0].state.chooser;
+  const autre = chooser === PIDS[0] ? PIDS[1] : PIDS[0];
+  const refus = await handle('playerPick', { code, pid: autre, theme: 0 });
+  ok(refus.ok === false, 'un autre joueur ne peut pas choisir à sa place');
+
+  await handle('playerPick', { code, pid: chooser, theme: 0 });
+  v = await handle('adminState', { code });
+  ok(v.status === 'INTRO' && v.chapter.name === 'Cinéma', 'le thème choisi lance la question');
+  ok(v.grille[0].reste === 1, 'le tableau se vide au fur et à mesure');
+  ok(v.choisiPar, 'on garde qui a choisi : ' + v.choisiPar);
+
+  // on joue les trois questions, le maître du jeu choisissant à la place des joueurs
+  let tours = 0;
+  while (v.status !== 'END' && tours < 10) {
+    tours++;
+    if (v.status === 'CHOIX') {
+      const st = db.rows('games')[0].state;
+      v = await handle('adminPick', { code, theme: st.restant.findIndex(n => n > 0) });
+    } else if (v.status === 'INTRO' || v.status === 'QUESTION') {
+      fastForwardIntro(db, code);
+      const q = db.rows('game_mj')[0].state.current;
+      await handle('playerAnswer', { code, pid: PIDS[0], qIndex: db.rows('games')[0].state.qIndex, answer: q.correct });
+      v = await handle('adminReveal', { code });
+    } else v = await handle('adminNext', { code });
+  }
+  ok(v.status === 'END', 'la partie se termine quand le tableau est vide');
+  ok(v.qIndex + 1 === 3, 'les 3 questions du tableau ont été jouées');
+  ok((db.rows('games')[0].state.restant || []).every(n => n === 0), 'plus rien à choisir');
+  ok(db.rows('parties').length === 1, 'la partie rejoint le classement général');
+}
+
 /* ================= 4 bis. Les joueurs notent la difficulté ================= */
 console.log('\n4 bis. Notation des questions par les joueurs');
 {
