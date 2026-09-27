@@ -329,6 +329,34 @@ console.log('\n5. Chapitres et bascule de l\'écran');
   ok(scr.code === mj2.code && scr.code !== code, 'une nouvelle partie fait basculer l\'écran public tout seul');
 }
 
+/* ================= 4 bis. Les joueurs notent la difficulté ================= */
+console.log('\n4 bis. Notation des questions par les joueurs');
+{
+  const { db, handle } = fresh();
+  const mj = await handle('adminCreateGame', { settings: { chapters: [{ nb: 2, level: 1, types: ['QCM'] }] } });
+  const code = mj.code;
+  await handle('playerJoin', { code, pid: PIDS[0], pseudo: 'Constance' });
+  await handle('playerJoin', { code, pid: PIDS[1], pseudo: 'Paul' });
+  await handle('adminNext', { code });
+  fastForwardIntro(db, code);
+  const q = db.rows('game_mj')[0].state.current;
+  await handle('playerAnswer', { code, pid: PIDS[0], qIndex: 0, answer: q.correct });
+  await handle('adminReveal', { code });
+
+  const r = await handle('playerRate', { code, pid: PIDS[0], qIndex: 0, note: 4 });
+  ok(r.ok === true, 'le joueur note la question 4 étoiles');
+  ok(db.rows('answers').filter(a => a.pid === PIDS[0])[0].note === 4, 'la note est enregistrée avec sa réponse');
+
+  // celui qui n'a pas répondu a quand même une ligne à la révélation : il peut noter aussi
+  const r2 = await handle('playerRate', { code, pid: PIDS[1], qIndex: 0, note: 5 });
+  ok(r2.ok === true && db.rows('answers').filter(a => a.pid === PIDS[1])[0].note === 5,
+    'même sans avoir répondu, on peut donner son avis');
+
+  const faux = await handle('playerRate', { code, pid: PIDS[0], qIndex: 0, note: 9 });
+  ok(faux.ok === false, 'une note hors de 1 à 5 est refusée');
+  ok(db.rows('answers').filter(a => a.pid === PIDS[0])[0].note === 4, 'et l\'ancienne note reste');
+}
+
 /* ================= 5 bis. Ménage dans le classement général ================= */
 console.log('\n5 bis. Effacer une partie de test, renommer un joueur');
 {

@@ -52,6 +52,7 @@ const S = {
   pseudo: store('qc_pseudo') || '',
   view: null, key: '', joined: false, local: null, soundFor: null, endSound: false, polling: false, lastTick: null,
   audioPret: false,
+  notes: {},          // ce que j'ai noté, par question
 };
 const app = $('#app');
 
@@ -383,7 +384,9 @@ function render(v, answered) {
           ${v.reveal.answerMore ? `<div class="muted" style="font-size:13px">${esc(v.reveal.answerMore)}</div>` : ''}
           ${r.answered && !r.ok && r.a && !carte ? `<div class="muted">Ta réponse : ${esc(r.a)}</div>` : ''}
           ${v.reveal.expl ? `<p style="margin-bottom:0">💡 ${esc(v.reveal.expl)}</p>` : ''}
-        </div>`;
+        </div>
+        ${noterHtml(v)}`;
+      brancherNotes(v);
       if (carte) makeMap($('#pmap'), q.zone, { interactive: true }).then(map => drawMapReveal(map, v.reveal.target, v.reveal.pins, v.reveal.answerText)).catch(() => {});
       if (S.soundFor !== v.qIndex && !r.spect) {
         S.soundFor = v.qIndex;
@@ -584,6 +587,34 @@ setInterval(() => {
   const pz = $('#tpause');
   if (pz) pz.style.display = v.paused ? '' : 'none';
 }, 250);
+
+/* ---------------- Noter la difficulté ---------------- */
+/**
+ * Après la révélation, chacun dit ce qu'il a pensé de la question. Ces avis
+ * corrigent la difficulté de la banque : une question notée 2 ★ que personne ne
+ * trouve finira par remonter, et l'inverse.
+ */
+function noterHtml(v) {
+  const d = S.notes[v.qIndex];
+  return `<div class="card col" id="noter" style="gap:6px">
+    <div class="muted center" style="font-size:13px">${d ? 'Merci ! Difficulté selon toi :' : 'Elle était difficile, selon toi ?'}</div>
+    <div class="row" style="justify-content:center;gap:4px">
+      ${[1, 2, 3, 4, 5].map(n => `<button class="btn note${d >= n ? ' primary' : ''}" data-note="${n}"
+        title="${['très facile', 'facile', 'moyenne', 'difficile', 'très difficile'][n - 1]}">★</button>`).join('')}
+    </div>
+    ${d ? '' : '<div class="muted center" style="font-size:11px">1 ★ très facile · 5 ★ très difficile</div>'}
+  </div>`;
+}
+
+function brancherNotes(v) {
+  document.querySelectorAll('#noter [data-note]').forEach(b => b.onclick = () => {
+    const n = Number(b.dataset.note);
+    S.notes[v.qIndex] = n;                       // affiché tout de suite, même hors réseau
+    const box = $('#noter');
+    if (box) { box.outerHTML = noterHtml(v); brancherNotes(v); }
+    rpc('playerRate', { code: S.code, pid: S.pid, qIndex: v.qIndex, note: n }).catch(() => {});
+  });
+}
 
 /* ---------------- Démarrage ---------------- */
 if (S.code) screenJoin(); else screenCode();

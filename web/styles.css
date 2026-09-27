@@ -176,3 +176,6 @@ table.tbl td.num, table.tbl th.num { text-align: right; font-variant-numeric: ta
   pointer-events: none;
   opacity: .5;
 }
+
+/* Étoiles de notation de la difficulté, sur le téléphone du joueur */
+.btn.note { padding: 8px 14px; font-size: 22px; line-height: 1; min-width: 46px; }

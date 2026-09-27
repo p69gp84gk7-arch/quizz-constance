@@ -7,12 +7,13 @@ const ALL_TYPES = ['QCM', 'VF', 'ESTIMATION', 'ORDRE', 'CARTE'];
  * avec son chrono, ses points et sa façon de répondre. La partie, c'est la somme
  * des chapitres — c'est elle qui donne le classement final.
  */
-const REGLES_CH = ['duration', 'points', 'estimation', 'margePct', 'choix', 'estimQcm',
+const REGLES_CH = ['duration', 'points', 'estimation', 'margePct', 'choix', 'pieges', 'estimQcm',
   'saisie', 'saisieNiveau', 'joker', 'bonus', 'autoReveal'];
 
 const REGLES_DEFAUT = {
-  duration: 30, points: 'rapidite', estimation: 'marge', margePct: 10, choix: 'adaptatifs',
-  estimQcm: 'auto', saisie: 'auto', saisieNiveau: 4.5, joker: true, bonus: false, autoReveal: true,
+  duration: 30, points: 'rapidite', estimation: 'marge', margePct: 10,
+  choix: 'adaptatifs', pieges: 'auto', estimQcm: 'auto', saisie: 'auto', saisieNiveau: 4.5,
+  joker: true, bonus: false, autoReveal: true,
 };
 
 /**
@@ -162,7 +163,8 @@ function renderPreparer() {
   <div class="col">
     <div class="card col">
       <div class="row"><b>Modèles :</b>
-        ${Object.keys(PRESETS).map(p => `<button class="btn small" data-preset="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+        ${Object.keys(PRESETS).map(p => `<button class="btn small" data-preset="${esc(p)}">${esc(p)}</button>`).join('')}
+        <button class="btn small ${A.yrsOpen ? 'primary' : ''}" id="yrsBtn">📅 Par années…</button></div>
       <div class="row"><b>Mes montages :</b>
         ${A.montages.length
           ? A.montages.map((m, i) => `<span class="mont"><button class="btn small" data-mont="${i}" title="${esc(m.desc || '')}">💾 ${esc(m.name)}</button><button class="btn small mont-x" data-montdel="${i}" title="Supprimer ce montage">✕</button></span>`).join('')
@@ -172,7 +174,7 @@ function renderPreparer() {
       </div>
     </div>
 
-    ${yearsCard()}
+    ${A.yrsOpen ? yearsCard() : ''}
 
     <div class="card row">
       <b>🎲 Quiz aléatoire :</b>
@@ -292,13 +294,22 @@ function chapterCard(c, i) {
  * chrono, ses points, sa façon de répondre. Un nouveau chapitre reprend les
  * règles du précédent — à changer ensuite si on veut une manche différente.
  */
-const LIB_POINTS = { rapidite: 'rapidité', series: 'rapidité + séries', simple: '1 point' };
+const LIB_POINTS = {
+  simple: '1 point par bonne réponse',
+  simple_bonus: '1 point + 1 au plus rapide',
+  paliers: 'podium : 5, 3, 2, 1 point',
+  difficulte: '100 × la difficulté (sans chrono)',
+  rapidite: 'points × difficulté + rapidité',
+  series: 'idem + bonus de séries',
+};
 const LIB_SAISIE = { auto: 'selon la difficulté', jamais: 'jamais (toujours 4 propositions)', toujours: 'toujours au clavier' };
 const LIB_NIVEAU = { 3: '★★★', 4: '★★★★', 4.5: '★★★★½', 5: '★★★★★' };
 
 /** Une ligne de résumé, pour lire les règles sans ouvrir le bloc. */
 function resumeRegles(r) {
   const bouts = [r.duration + ' s', LIB_POINTS[r.points] || r.points];
+  if (r.pieges === 'proches') bouts.push('pièges serrés');
+  else if (r.pieges === 'nets') bouts.push('pièges évidents');
   if (r.saisie === 'jamais') bouts.push('que des QCM');
   else if (r.saisie === 'toujours') bouts.push('réponses au clavier');
   else bouts.push('clavier à partir de ' + (LIB_NIVEAU[r.saisieNiveau] || r.saisieNiveau));
@@ -325,6 +336,7 @@ function reglesChapitre(c, i) {
       <label>Réponse tapée${sel('saisie', LIB_SAISIE)}</label>
       <label>… à partir de${sel('saisieNiveau', LIB_NIVEAU)}</label>
       <label>Propositions${sel('choix', { adaptatifs: 'au hasard selon la difficulté', fixes: 'celles de la banque' })}</label>
+      <label>Pièges${sel('pieges', { auto: 'selon la difficulté', nets: 'bien différents', proches: 'qui se ressemblent' })}</label>
       <label>Estimations${sel('estimQcm', { auto: 'QCM, puis valeur exacte', mixte: 'mélange', qcm: 'toujours en QCM', libre: 'toujours en réponse libre' })}</label>
       <label>Estimation juste${sel('estimation', { marge: 'si dans la marge', proche: 'le plus proche gagne' })}</label>
       <label class="duo">Marge <input type="number" min="1" max="50" data-cn="margePct" value="${r.margePct}"> %</label>
@@ -423,6 +435,7 @@ function bindPreparer() {
   $('#rnd-play').onclick = () => { readRnd(); randomQuiz(); rerender(); $('#create').click(); };
 
   bindYears(rerender);
+  $('#yrsBtn').onclick = () => { A.yrsOpen = !A.yrsOpen; renderPreparer(); };
 
   $('#addCh').onclick = () => {
     const prec = d.chapters[d.chapters.length - 1];
@@ -625,7 +638,7 @@ function yearsCard() {
   const eras = (A.catalog.epoques || []);
   const themes = themeNames().filter(t => countYears([t], y.eras, y.dates) > 0);
   const n = countYears(y.themes, y.eras, y.dates);
-  return `<details class="card col" id="yrs" ${A.yrsOpen ? 'open' : ''}>
+  return `<details class="card col" id="yrs" open>
     <summary style="cursor:pointer"><b>📅 Modèle par années</b> <span class="muted">— une décennie, un voyage dans le temps, les thèmes de ton choix</span></summary>
     <div class="col" style="margin-top:10px">
       <div><label class="lbl">Époques (aucune = toutes)</label>
@@ -650,7 +663,7 @@ function bindYears(rerender) {
   const y = A.yrs;
   const box = $('#yrs');
   if (!box) return;
-  box.ontoggle = () => { A.yrsOpen = box.open; };
+  box.ontoggle = () => { if (!box.open) { A.yrsOpen = false; renderPreparer(); } };
   const toggle = (arr, v) => { const j = arr.indexOf(v); if (j >= 0) arr.splice(j, 1); else arr.push(v); };
   box.querySelectorAll('[data-yera]').forEach(b => b.onclick = () => { toggle(y.eras, b.dataset.yera); rerender(); });
   box.querySelectorAll('[data-ytheme]').forEach(b => b.onclick = () => { toggle(y.themes, b.dataset.ytheme); rerender(); });

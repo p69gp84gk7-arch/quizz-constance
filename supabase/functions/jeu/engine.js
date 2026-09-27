@@ -54,7 +54,7 @@ const clamp = (v, a, b, d) => { v = Number(v); return isNaN(v) ? d : Math.max(a,
 
 /** Réglages qu'un chapitre peut redéfinir pour lui seul. */
 export const REGLES_CHAPITRE = ['duration', 'points', 'estimation', 'margePct', 'estimQcm', 'choix',
-  'saisie', 'saisieNiveau', 'joker', 'bonus', 'autoReveal'];
+  'pieges', 'saisie', 'saisieNiveau', 'joker', 'bonus', 'autoReveal'];
 
 export function normalizeSettings(s) {
   s = s || {};
@@ -88,7 +88,7 @@ export function normalizeSettings(s) {
     chapters: chapters,
     duration: clamp(s.duration, 10, 120, 30),
     maxPlayers: clamp(s.maxPlayers, 2, 15, 15),
-    points: ['simple', 'rapidite', 'series'].indexOf(s.points) >= 0 ? s.points : 'rapidite',
+    points: POINTS.indexOf(s.points) >= 0 ? s.points : 'rapidite',
     estimation: s.estimation === 'proche' ? 'proche' : 'marge',
     margePct: clamp(s.margePct, 1, 50, 10),
     visual: String(s.visual || 'plateau'),
@@ -99,6 +99,9 @@ export function normalizeSettings(s) {
     chrono: 'auto', // le chrono démarre toujours seul à la fin du compte à rebours
     autoReveal: s.autoReveal !== false,
     choix: s.choix === 'fixes' ? 'fixes' : 'adaptatifs',
+    // Des propositions qui se ressemblent rendent une question facile difficile :
+    // « auto » suit le niveau, « proches » piège tout le monde, « nets » laisse respirer.
+    pieges: ['auto', 'nets', 'proches'].indexOf(s.pieges) >= 0 ? s.pieges : 'auto',
     // « auto » : QCM aux niveaux faciles, saisie au clavier quand la difficulté monte
     estimQcm: ['libre', 'qcm', 'mixte', 'auto'].indexOf(s.estimQcm) >= 0 ? s.estimQcm : 'auto',
     saisie: ['auto', 'jamais', 'toujours'].indexOf(s.saisie) >= 0 ? s.saisie : 'auto',
@@ -130,7 +133,8 @@ export function rules(st) {
   out.margePct = clamp(out.margePct, 1, 50, s.margePct);
   out.saisieNiveau = clamp(out.saisieNiveau, 2, 5, s.saisieNiveau);
   if (out.choix !== 'fixes' && out.choix !== 'adaptatifs') out.choix = s.choix;
-  if (['simple', 'rapidite', 'series'].indexOf(out.points) < 0) out.points = s.points;
+  if (['auto', 'nets', 'proches'].indexOf(out.pieges) < 0) out.pieges = s.pieges;
+  if (POINTS.indexOf(out.points) < 0) out.points = s.points;
   if (['libre', 'qcm', 'mixte', 'auto'].indexOf(out.estimQcm) < 0) out.estimQcm = s.estimQcm;
   if (['auto', 'jamais', 'toujours'].indexOf(out.saisie) < 0) out.saisie = s.saisie;
   if (out.estimation !== 'proche' && out.estimation !== 'marge') out.estimation = s.estimation;
@@ -601,7 +605,9 @@ export function loadQuestion(r, st, families) {
       const fixed = [r.choix2, r.choix3, r.choix4].map(x => String(x == null ? '' : x).trim()).filter(x => x && x !== rep);
       let wrong = fixed;
       const fam = st && reg.choix === 'adaptatifs' && families ? families[q.theme + '|' + q.text] : null;
-      if (fam) wrong = adaptiveDistractors(rep, fixed, fam, q.cat, q.epoque, level);
+      // « proches » : des pièges serrés même sur une question facile ; « nets » : l'inverse
+      const nivPiege = reg.pieges === 'proches' ? 5 : reg.pieges === 'nets' ? 1 : level;
+      if (fam) wrong = adaptiveDistractors(rep, fixed, fam, q.cat, q.epoque, nivPiege);
       q.choices = shuffle([rep].concat(wrong.slice(0, 3)));
       q.secret.correct = q.choices.indexOf(rep);
       if (court) shortenChoices(q, rep);
@@ -737,14 +743,26 @@ export function smallestTeam(st, players) {
 /* Correction, points et difficulté                                    */
 /* ------------------------------------------------------------------ */
 
+/** Les systèmes de points proposés au maître du jeu. */
+export const POINTS = ['simple', 'simple_bonus', 'paliers', 'difficulte', 'rapidite', 'series'];
+
+/**
+ * Points d'une bonne réponse. Les systèmes qui dépendent du classement des
+ * joueurs (bonus au plus rapide, podium) rendent ici leur valeur de base :
+ * le supplément est ajouté par doReveal, qui seul connaît tout le monde.
+ */
 export function points(s, diff, t, streak) {
-  if (s.points === 'simple') return 1;
+  if (s.points === 'simple' || s.points === 'simple_bonus' || s.points === 'paliers') return 1;
   const base = 100 * diff;
+  if (s.points === 'difficulte') return base;          // la vitesse ne compte pas
   const speed = Math.max(0, 1 - (t || 0) / s.duration);
   let pts = base + Math.round(base * 0.5 * speed);
   if (s.points === 'series' && streak >= 3) pts += Math.min(200, 50 * (streak - 2));
   return pts;
 }
+
+/** Le podium des points « paliers » : 5 points au premier, puis 3, 2, 1. */
+export const PALIERS = [5, 3, 2, 1];
 
 /**
  * Corrige la question en cours. `players` = { pid: joueur }, `answers` = { pid: {a, t} }.
@@ -813,6 +831,14 @@ export function doReveal(st, players, answers) {
     }
     results[p] = { ok: ok, pts: pts, a: txt, t: ans ? ans.t : null, answered: !!ans, f: f, km: km, spect: !plays(p) };
   });
+
+  // 1 bis. Systèmes qui comparent les joueurs entre eux : bonus au plus rapide, podium
+  if (s.points === 'simple_bonus' || s.points === 'paliers') {
+    const ordre = inPlay.filter(p => results[p].ok && answers[p] && results[p].t !== null)
+      .sort((x, y) => results[x].t - results[y].t);
+    if (s.points === 'simple_bonus') { if (ordre[0]) results[ordre[0]].pts += mult; }
+    else ordre.forEach((p, i) => { if (PALIERS[i]) results[p].pts = PALIERS[i] * mult; });
+  }
 
   // 2. Règles du format
   let winner = null;

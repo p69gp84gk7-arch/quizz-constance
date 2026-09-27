@@ -162,6 +162,67 @@ console.log('\n4. Modes de points');
   ok(E.points(r, 3, 30, 1) === 300, 'rapidité : aucun bonus au bout des 30 s');
   const se = E.normalizeSettings({ points: 'series', duration: 30 });
   ok(E.points(se, 1, 30, 2) === 100 && E.points(se, 1, 30, 3) === 150, 'séries : bonus à partir de 3 bonnes réponses d\'affilée');
+  const d = E.normalizeSettings({ points: 'difficulte', duration: 30 });
+  ok(E.points(d, 4, 0, 1) === 400 && E.points(d, 4, 29, 1) === 400, 'difficulté seule : répondre vite ne rapporte rien de plus');
+
+  // les systèmes qui comparent les joueurs : bonus au plus rapide, podium
+  const qcm = st => { st.current = E.loadQuestion({ id: 'P1', theme: 'T', difficulte: 2, type: 'QCM',
+    question: 'Capitale ?', reponse: 'Paris', choix2: 'Lyon', choix3: 'Nice', choix4: 'Brest' }, st, {}); return st.current; };
+
+  const un = createGame({ chapters: [{ nb: 1, level: 1 }], points: 'simple_bonus' });
+  const j = mkPlayers(4);
+  const pj = Object.keys(j);
+  let q = qcm(un);
+  un.status = 'QUESTION'; un.qIndex = 0;
+  let res = E.doReveal(un, j, {
+    [pj[0]]: { a: q.secret.correct, t: 9 },
+    [pj[1]]: { a: q.secret.correct, t: 4 },          // le plus rapide
+    [pj[2]]: { a: (q.secret.correct + 1) % 4, t: 2 },
+    [pj[3]]: { a: q.secret.correct, t: 12 },
+  });
+  ok(res[pj[1]].pts === 2, 'un point + un bonus pour le plus rapide : ' + res[pj[1]].pts);
+  ok(res[pj[0]].pts === 1 && res[pj[3]].pts === 1, 'les autres bonnes réponses marquent 1 point');
+  ok(res[pj[2]].pts === 0, 'répondre vite mais faux ne rapporte rien');
+
+  const pal = createGame({ chapters: [{ nb: 1, level: 1 }], points: 'paliers' });
+  const k = mkPlayers(5);
+  const pk = Object.keys(k);
+  q = qcm(pal);
+  pal.status = 'QUESTION'; pal.qIndex = 0;
+  res = E.doReveal(pal, k, {
+    [pk[0]]: { a: q.secret.correct, t: 3 },
+    [pk[1]]: { a: q.secret.correct, t: 5 },
+    [pk[2]]: { a: q.secret.correct, t: 7 },
+    [pk[3]]: { a: q.secret.correct, t: 9 },
+    [pk[4]]: { a: q.secret.correct, t: 11 },
+  });
+  ok([0, 1, 2, 3].every((i, n) => res[pk[i]].pts === [5, 3, 2, 1][n]), 'podium : 5, 3, 2, 1 dans l\'ordre d\'arrivée');
+  ok(res[pk[4]].pts === 1, 'au-delà du podium, 1 point quand même');
+}
+
+/* ================= 4 bis. Des pièges plus ou moins serrés ================= */
+console.log('\n4 bis. Propositions qui se ressemblent');
+{
+  const fam = { 'Cinéma|Qui a réalisé ce film ?': [
+    ['Steven Spielberg', 'Blockbuster', 'Années 80'], ['George Lucas', 'Blockbuster', 'Années 80'],
+    ['Robert Zemeckis', 'Blockbuster', 'Années 80'], ['Ingmar Bergman', 'Auteur', 'Avant 1970'],
+    ['Andreï Tarkovski', 'Auteur', 'Avant 1970'], ['Agnès Varda', 'Auteur', 'Avant 1970'],
+  ] };
+  const r = { id: 'C1', theme: 'Cinéma', categorie: 'Blockbuster', epoque: 'Années 80', difficulte: 1, type: 'QCM',
+    question: 'Qui a réalisé ce film ?', reponse: 'Steven Spielberg', choix2: '', choix3: '', choix4: '' };
+  const tirer = pieges => {
+    const st = { level: 1, settings: E.normalizeSettings({ pieges: pieges, saisie: 'jamais' }), chapIndex: 0 };
+    let memeFamille = 0;
+    for (let i = 0; i < 40; i++) {
+      const q = E.loadQuestion(r, st, fam);
+      q.choices.forEach(c => { if (['George Lucas', 'Robert Zemeckis'].indexOf(c) >= 0) memeFamille++; });
+    }
+    return memeFamille;
+  };
+  const proches = tirer('proches');
+  const nets = tirer('nets');
+  ok(proches > nets, 'pièges « qui se ressemblent » : bien plus de réalisateurs de la même famille (' + proches + ' contre ' + nets + ')');
+  ok(E.normalizeSettings({ pieges: 'n\'importe quoi' }).pieges === 'auto', 'une valeur inconnue retombe sur « selon la difficulté »');
 }
 
 /* ================= 5. Estimation, ordre, carte ================= */

@@ -456,6 +456,12 @@ function bindMain(v) {
   }
 }
 
+/** Nom court de chaque système de points, pour la barre de réglages en direct. */
+const POINTS_COURT = {
+  simple: '1 par bonne réponse', simple_bonus: '1 + 1 au plus rapide', paliers: 'podium 5/3/2/1',
+  difficulte: '100 × difficulté', rapidite: 'rapidité', series: 'rapidité + séries',
+};
+
 function settingsCard(v) {
   const s = v.settings;
   if (v.status === 'END') return '';
@@ -467,7 +473,7 @@ function settingsCard(v) {
     <label class="switch"><input type="checkbox" id="s-auto" ${v.autoReveal !== false ? 'checked' : ''}> Révélation auto</label>
     <label>Chrono <select id="s-duree" style="width:auto">${[10, 15, 20, 25, 30, 45, 60, 90].map(n =>
       `<option value="${n}" ${n === (v.duration || s.duration) ? 'selected' : ''}>${n} s</option>`).join('')}</select></label>
-    <span class="muted">· ${v.chapter ? 'chapitre ' + v.chapter.idx + ' : ' + esc(v.chapter.name) + ' · ' : ''}points : ${{ simple: '1 par bonne réponse', rapidite: 'rapidité', series: 'rapidité + séries' }[v.points || s.points]}${v.joker ? ' · 🃏 joker 50/50' : ''}${s.finale ? ' · 🏁 finale ×3' : ''}</span>
+    <span class="muted">· ${v.chapter ? 'chapitre ' + v.chapter.idx + ' : ' + esc(v.chapter.name) + ' · ' : ''}points : ${POINTS_COURT[v.points || s.points] || (v.points || s.points)}${v.joker ? ' · 🃏 joker 50/50' : ''}${s.finale ? ' · 🏁 finale ×3' : ''}</span>
     <span class="muted" style="font-size:12px">Ces changements s'appliquent au chapitre en cours.</span>
   </div></details>`;
 }

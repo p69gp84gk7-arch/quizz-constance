@@ -659,6 +659,23 @@ export function createActions(db) {
         return { ok: true, t: t };
       }
 
+      /**
+       * Le joueur note la difficulté de la question qu'il vient de jouer (1 à 5
+       * étoiles). Ces avis corrigent « difficulte_mesuree » à la fin de la partie :
+       * une question notée 2 ★ que tout le monde trouve infernale remonte.
+       */
+      case 'playerRate': {
+        const pid = E.checkPid(p.pid);
+        const note = Math.round(Number(p.note));
+        if (!(note >= 1 && note <= 5)) return { ok: false, msg: 'Note entre 1 et 5 étoiles.' };
+        const qi = Number(p.qIndex);
+        if (!(qi >= 0)) return { ok: false, msg: 'Question inconnue.' };
+        const r = await db.from('answers').update({ note: note })
+          .eq('game_code', String(p.code || '').toUpperCase()).eq('pid', pid).eq('q_index', qi);
+        if (r.error) return { ok: false, msg: r.error.message };
+        return { ok: true, note: note };
+      }
+
       /** Joker 50/50 : retire deux mauvaises réponses (une fois par partie). */
       case 'playerJoker': {
         const pid = E.checkPid(p.pid);
