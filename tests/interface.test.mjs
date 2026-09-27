@@ -221,6 +221,43 @@ console.log("\n1. Le téléphone d'un joueur, de l'arrivée au résultat");
   ok(/\+\d+ pt/.test(P.txt()), 'ses points s\'affichent');
 }
 
+/* ========== Le téléphone choisit son thème (format « chacun son thème ») ========== */
+console.log("\n1 bis. Le joueur prend un thème dans le tableau");
+{
+  const mj = await handle('adminCreateGame', { settings: {
+    format: 'themes', lives: 5, choixOrdre: 'points', duration: 30,
+    chapters: [
+      { name: 'Cinéma', nb: 2, level: 1, themes: ['Cinéma'], types: ['QCM'] },
+      { name: 'Sport', nb: 2, level: 1, themes: ['Sport'], types: ['QCM'] },
+    ] } });
+  const code = mj.code;
+  const P = await loadPage('joueur.html', 'https://quizz.test/joueur.html?p=' + code);
+  P.$('#pseudo').value = 'Constance';
+  P.$('#join').click();
+  await wait(80);
+  ok(/Tu es dans la partie/.test(P.txt()), 'le joueur est dans la salle d\'attente');
+
+  await handle('adminNext', { code });          // la partie s'ouvre sur le choix du thème
+  push(P.subs, 'game_live', code);
+  await wait(60);
+  ok(/À toi de choisir/.test(P.txt()), 'seul joueur : c\'est forcément à lui de choisir');
+  const cases = P.doc.querySelectorAll('[data-theme]');
+  ok(cases.length === 2, 'les deux thèmes sont proposés');
+  ok([...cases].every(b => !b.disabled), 'et ils sont cliquables — c\'était le bug');
+  ok(/Cinéma/.test(P.txt()) && /Sport/.test(P.txt()), 'avec leur nom');
+  ok(/2 questions/.test(P.txt()), 'et le nombre de questions restantes');
+
+  cases[1].click();                              // il prend « Sport »
+  await wait(150);
+  const st = db.rows('games').filter(x => x.code === code)[0].state;
+  ok(st.status !== 'CHOIX', 'le choix lance la question : statut ' + st.status);
+  ok(st.settings.chapters[st.chapIndex].name === 'Sport', 'le thème choisi est bien celui du joueur');
+  ok(st.restant[1] === 1 && st.restant[0] === 2, 'le tableau se vide côté Sport uniquement');
+  push(P.subs, 'game_live', code);
+  await wait(60);
+  ok(!/À toi de choisir/.test(P.txt()), 'le téléphone est passé à la question');
+}
+
 /* ================= L'écran public ================= */
 console.log('\n2. L\'écran public');
 {

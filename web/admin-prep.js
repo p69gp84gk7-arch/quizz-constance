@@ -7,13 +7,12 @@ const ALL_TYPES = ['QCM', 'VF', 'ESTIMATION', 'ORDRE', 'CARTE', 'INDICE'];
  * avec son chrono, ses points et sa façon de répondre. La partie, c'est la somme
  * des chapitres — c'est elle qui donne le classement final.
  */
-const REGLES_CH = ['duration', 'points', 'estimation', 'margePct', 'choix', 'pieges', 'estimQcm',
-  'saisie', 'saisieNiveau', 'joker', 'bonus', 'autoReveal'];
+const REGLES_CH = ['duration', 'estimation', 'margePct', 'choix', 'pieges', 'estimQcm',
+  'saisie', 'saisieNiveau'];
 
 const REGLES_DEFAUT = {
-  duration: 30, points: 'rapidite', estimation: 'marge', margePct: 10,
+  duration: 30, estimation: 'marge', margePct: 10,
   choix: 'adaptatifs', pieges: 'auto', estimQcm: 'auto', saisie: 'auto', saisieNiveau: 4.5,
-  joker: true, bonus: false, autoReveal: true,
 };
 
 /**
@@ -78,6 +77,7 @@ function defaultDraft() {
   const d = Object.assign({
     title: 'Quizz', maxPlayers: 15, chrono: 'auto', visual: 'plateau', sounds: true, audioOn: 'ecran',
     format: 'classique', lives: 3, teams: 2, finale: false, choixOrdre: 'points', choixVies: true,
+    points: 'rapidite', joker: true, bonus: false, autoReveal: true,
   }, REGLES_DEFAUT);
   d.chapters = [defaultChapter('Culture générale', 15, 1)];
   return propager(d);
@@ -131,7 +131,14 @@ A.draft.chapters.forEach(c => {
   c.eras = c.eras || [];
   if (c.types && c.types.length === 4 && c.types.indexOf('CARTE') < 0) c.types = ALL_TYPES.slice(); // ancien brouillon « tous les types »
 });
-// Ancien brouillon : les réglages étaient au-dessus, ils descendent dans les chapitres
+// Ancien brouillon : points, révélation, questions en or et joker sont remontés
+// au niveau de la partie ; le reste descend dans les chapitres.
+['points', 'joker', 'bonus', 'autoReveal'].forEach(k => {
+  const ch = (A.draft.chapters || []).find(c => c.regles && c.regles[k] !== undefined);
+  if (ch && A.draft[k] === undefined) A.draft[k] = ch.regles[k];
+  (A.draft.chapters || []).forEach(c => { if (c.regles) delete c.regles[k]; });
+  if (A.draft[k] === undefined) A.draft[k] = defaultDraft()[k];
+});
 propager(A.draft);
 ['format', 'lives', 'teams', 'bonus', 'finale', 'joker', 'choixOrdre', 'choixVies']
   .forEach(k => { if (A.draft[k] === undefined) A.draft[k] = defaultDraft()[k]; });
@@ -210,8 +217,13 @@ function renderPreparer() {
         <div><label class="lbl">Son du blind test</label><select data-k="audioOn" data-rerender>
           ${opt('ecran', d.audioOn, 'Sur l\'écran public')}${opt('admin', d.audioOn, 'Sur mon appareil')}${opt('joueurs', d.audioOn, 'Sur les téléphones des joueurs')}${opt('tous', d.audioOn, 'Partout à la fois')}</select>
           ${d.audioOn === 'joueurs' || d.audioOn === 'tous' ? '<div class="muted" style="font-size:12px">Chaque joueur devra toucher « 🔊 Activer le son » en arrivant : les téléphones interdisent de lancer un son sans geste de leur part. Prévenez-les d\'utiliser des écouteurs, sinon les extraits se chevauchent d\'un téléphone à l\'autre.</div>' : ''}</div>
+        <div><label class="lbl">Système de points</label><select data-k="points">
+          ${Object.keys(LIB_POINTS).map(k => opt(k, d.points, LIB_POINTS[k])).join('')}</select></div>
         <div class="col" style="gap:6px;justify-content:flex-end">
           <label class="switch"><input type="checkbox" data-k="sounds" ${d.sounds ? 'checked' : ''}> Sons (bonne/mauvaise réponse)</label>
+          <label class="switch"><input type="checkbox" data-k="autoReveal" ${d.autoReveal ? 'checked' : ''}> Révéler à la fin du chrono</label>
+          <label class="switch"><input type="checkbox" data-k="joker" ${d.joker ? 'checked' : ''}> 🃏 Un joker 50/50 par joueur</label>
+          <label class="switch"><input type="checkbox" data-k="bonus" ${d.bonus ? 'checked' : ''}> ⭐ Questions en or (×2) au hasard</label>
         </div>
       </div>
       <h3 style="margin:8px 0 0">🎮 Format de jeu</h3>
@@ -323,15 +335,14 @@ const LIB_NIVEAU = { 3: '★★★', 4: '★★★★', 4.5: '★★★★½', 5
 
 /** Une ligne de résumé, pour lire les règles sans ouvrir le bloc. */
 function resumeRegles(r) {
-  const bouts = [r.duration + ' s', LIB_POINTS[r.points] || r.points];
-  if (r.pieges === 'proches') bouts.push('pièges serrés');
-  else if (r.pieges === 'nets') bouts.push('pièges évidents');
+  const bouts = [r.duration + ' s'];
   if (r.saisie === 'jamais') bouts.push('que des QCM');
   else if (r.saisie === 'toujours') bouts.push('réponses au clavier');
   else bouts.push('clavier à partir de ' + (LIB_NIVEAU[r.saisieNiveau] || r.saisieNiveau));
-  if (r.joker) bouts.push('🃏 joker');
-  if (r.bonus) bouts.push('⭐ questions en or');
-  if (!r.autoReveal) bouts.push('révélation à la main');
+  if (r.pieges === 'proches') bouts.push('pièges serrés');
+  else if (r.pieges === 'nets') bouts.push('pièges évidents');
+  if (r.choix === 'fixes') bouts.push('propositions de la banque');
+  if (r.estimQcm !== 'auto') bouts.push('estimations : ' + r.estimQcm);
   return bouts.join(' · ');
 }
 
@@ -348,7 +359,6 @@ function reglesChapitre(c, i) {
     <summary class="lbl" style="cursor:pointer">⚙️ Règles de ce chapitre — <span class="muted" style="font-weight:400">${esc(resumeRegles(r))}</span></summary>
     <div class="regles">
       <label>Temps par question${sel('duration', durees)}</label>
-      <label>Points${sel('points', LIB_POINTS)}</label>
       <label>Réponse tapée${sel('saisie', LIB_SAISIE)}</label>
       <label>… à partir de${sel('saisieNiveau', LIB_NIVEAU)}</label>
       <label>Propositions${sel('choix', { adaptatifs: 'au hasard selon la difficulté', fixes: 'celles de la banque' })}</label>
@@ -356,9 +366,6 @@ function reglesChapitre(c, i) {
       <label>Estimations${sel('estimQcm', { auto: 'QCM, puis valeur exacte', mixte: 'mélange', qcm: 'toujours en QCM', libre: 'toujours en réponse libre' })}</label>
       <label>Estimation juste${sel('estimation', { marge: 'si dans la marge', proche: 'le plus proche gagne' })}</label>
       <label class="duo">Marge <input type="number" min="1" max="50" data-cn="margePct" value="${r.margePct}"> %</label>
-      <label>Joker 50/50${sel('joker', { oui: 'autorisé', non: 'interdit' })}</label>
-      <label>Questions en or${sel('bonus', { oui: 'oui (×2 au hasard)', non: 'non' })}</label>
-      <label>Révélation${sel('autoReveal', { oui: 'à la fin du chrono', non: 'quand je le décide' })}</label>
     </div>
     <div class="row" style="margin-top:10px">
       <button class="btn small" data-ccopy>📋 Ces règles pour tous les chapitres</button>

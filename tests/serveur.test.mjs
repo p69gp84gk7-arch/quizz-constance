@@ -213,7 +213,7 @@ console.log('\n3 bis. Pause du chrono et correction après coup');
   const mj = await handle('adminCreateGame', { settings: {
     chapters: [
       { name: 'Manche 1', nb: 2, level: 1, types: ['QCM'] },
-      { name: 'Manche rapide', nb: 2, level: 1, types: ['QCM'], regles: { duration: 12, points: 'simple' } },
+      { name: 'Manche rapide', nb: 2, level: 1, types: ['QCM'], regles: { duration: 12, saisie: 'jamais' } },
     ], duration: 30, points: 'rapidite' } });
   const code = mj.code;
   await handle('playerJoin', { code, pid: PIDS[0], pseudo: 'Constance' });
@@ -271,7 +271,7 @@ console.log('\n3 bis. Pause du chrono et correction après coup');
   await handle('adminNext', { code });          // première question du chapitre 2
   live = db.rows('game_live')[0].state;
   ok(live.duration === 12, 'chapitre 2 : le chrono passe à 12 s');
-  ok(live.points === 'simple', 'chapitre 2 : les points passent en mode simple');
+  ok(live.points === 'rapidite', 'les points, eux, restent ceux de la partie');
   const q2 = db.rows('game_mj')[0].state.current;
   // seul un extrait sonore cale sa durée sur le chrono ; une photo garde la sienne
   const sonore = q2.media && (q2.media.kind === 'youtube' || q2.media.kind === 'audio');

@@ -480,15 +480,18 @@ console.log('\n8 quater. Les règles vivent dans le chapitre');
     duration: 30, points: 'rapidite', saisie: 'auto', joker: true,
     chapters: [
       { name: 'Échauffement', nb: 5, level: 1 },
-      { name: 'Finale', nb: 5, level: 3, regles: { duration: 15, points: 'simple', joker: false, choix: 'fixes' } },
+      { name: 'Finale', nb: 5, level: 3, regles: { duration: 15, choix: 'fixes', saisie: 'toujours', points: 'simple' } },
     ],
   });
   ok(s.chapters[1].regles.duration === 15, 'le chapitre garde sa durée');
   ok(s.chapters[1].regles.choix === 'fixes', 'et sa façon de tirer les propositions');
+  ok(s.chapters[1].regles.points === undefined,
+    'les points ne sont PAS un réglage de chapitre : ils valent pour toute la partie');
   const st = i => ({ settings: s, chapIndex: i });
   ok(E.rules(st(0)).duration === 30 && E.rules(st(0)).points === 'rapidite', 'chapitre 1 : les règles de la partie');
   const r = E.rules(st(1));
-  ok(r.duration === 15 && r.points === 'simple' && r.joker === false && r.choix === 'fixes', 'chapitre 2 : les siennes');
+  ok(r.duration === 15 && r.choix === 'fixes' && r.saisie === 'toujours', 'chapitre 2 : son rythme et sa façon de répondre');
+  ok(r.points === 'rapidite' && r.joker === true, 'mais les points et le joker restent ceux de la partie');
   ok(r.maxPlayers === s.maxPlayers, 'ce que le chapitre ne dit pas reste celui de la partie');
   const abime = E.rules({ settings: E.normalizeSettings({ duration: 30, chapters: [{ nb: 5, regles: { duration: 999 } }] }), chapIndex: 0 });
   ok(abime.duration === 120, 'une durée délirante dans un chapitre est ramenée dans les clous');

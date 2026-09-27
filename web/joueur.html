@@ -126,6 +126,8 @@ function mergeMe(v) {
   const mine = S.local && S.local.qIndex === v.qIndex;
   const res = v.results ? v.results[S.pseudo] : null;
   v.me = Object.assign({ pseudo: S.pseudo, score: 0, rank: 1, good: 0, streak: 0 }, row || {}, res ? { result: res } : {}, {
+    // « chacun son thème » : la vitrine est commune, je me reconnais à mon pseudo
+    choisir: !!v.chooser && v.chooser === S.pseudo,
     answered: !!mine, answer: mine ? S.local.a : null,
     jokerUsed: !!S.jokerUsed,
     hide: S.joker && S.joker.qIndex === v.qIndex ? S.joker.hide : null,
