@@ -442,7 +442,9 @@ function mediaHtml(q, big, live) {
       const h = String(q.id || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
       style += `;animation-duration:${d}s;animation-delay:-${Math.min(el, d)}s;transform-origin:${25 + h % 50}% ${25 + (h * 7) % 50}%`;
     }
-    return `<div class="media-box"><img class="media-img ${fx ? 'fx-' + fx : ''}" src="${esc(q.media.url)}" alt="" style="${style}" referrerpolicy="no-referrer"></div>`;
+    // Le crédit de l'auteur accompagne la photo : c'est ce que demandent les licences libres
+    const credit = q.media.credit && !fx ? `<div class="media-credit">📷 ${esc(q.media.credit)}</div>` : '';
+    return `<div class="media-box"><img class="media-img ${fx ? 'fx-' + fx : ''}" src="${esc(q.media.url)}" alt="" style="${style}" referrerpolicy="no-referrer">${credit}</div>`;
   }
   if (q.media.kind === 'youtube' || q.media.kind === 'audio') return `<div class="center"><div class="eq" id="eq"><span></span><span></span><span></span><span></span><span></span></div><div class="muted" style="margin-top:6px">🎵 Blind test</div></div>`;
   return '';

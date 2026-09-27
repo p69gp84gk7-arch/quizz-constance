@@ -200,3 +200,7 @@ table.tbl td.num, table.tbl th.num { text-align: right; font-variant-numeric: ta
 .theme-case .reste { font-size: 13px; color: var(--muted); }
 .theme-case.vide { opacity: .35; text-decoration: line-through; }
 .theme-case:disabled { cursor: default; }
+
+/* Crédit de l'auteur d'une photo libre : discret, mais présent */
+.media-box { position: relative; }
+.media-credit { font-size: 10px; opacity: .55; text-align: right; margin-top: 2px; line-height: 1.2; }

@@ -289,7 +289,7 @@ export function pickId(pool, level, used) {
 /* Média                                                               */
 /* ------------------------------------------------------------------ */
 
-export function parseMedia(url, start, dur) {
+export function parseMedia(url, start, dur, credit) {
   url = String(url || '').trim();
   if (!url) return null;
   const yt = url.match(/(?:youtu\.be\/|[?&]v=|embed\/|shorts\/|live\/)([\w-]{11})/);
@@ -303,7 +303,8 @@ export function parseMedia(url, start, dur) {
   }
   // Photo : « #zoom » = gros plan qui se dézoome, « #flou » = image qui se précise
   const fx = (url.match(/#(zoom|flou)$/) || [])[1] || '';
-  return { kind: 'image', url: url.replace(/#(zoom|flou)$/, ''), fx: fx };
+  // `credit` : l'auteur et la licence de la photo, affichés en petit sous l'image
+  return { kind: 'image', url: url.replace(/#(zoom|flou)$/, ''), fx: fx, credit: String(credit || '') };
 }
 
 export const SOUND_KINDS = ['youtube', 'audio'];
@@ -544,7 +545,7 @@ export function loadQuestion(r, st, families) {
     id: String(r.id), theme: String(r.theme), cat: String(r.categorie || ''),
     diff: Number(r.difficulte) || 1, type: type, text: String(r.question),
     expl: String(r.explication || ''), indices: String(r.indices || ''),
-    media: parseMedia(r.media_url, r.media_debut, r.media_duree), secret: {},
+    media: parseMedia(r.media_url, r.media_debut, r.media_duree, r.media_credit), secret: {},
     epoque: String(r.epoque || ''), anecdote: String(r.anecdote || ''),
   };
   const level = st ? st.level : q.diff;
