@@ -23,6 +23,7 @@ Les questions déjà présentes ne sont jamais touchées : seules les nouvelles 
 | `questions-dates.csv` | 73 questions de dates : « Que s'est-il passé en 1969 ? » et classements chronologiques |
 | `questions-devinettes.csv` | 65 devinettes à 4 indices (38 personnalités, des lieux, des films, des animaux) |
 | `questions-citations.csv` | 70 questions du thème « Citations & expressions » : proverbes à trou, phrases célèbres, sens d'expressions |
+| `questions-nouveaux-themes.csv` | 108 questions dans 8 nouveaux thèmes (mythologie, espace, corps humain, inventions, séries, marques, contes, transports) |
 
 Importez-les l'un après l'autre : l'ordre n'a pas d'importance.
 
@@ -36,6 +37,20 @@ mauvaises réponses de secours quand la question se joue en QCM.
 
 On peut aussi en écrire une depuis l'interface : onglet **Questions**, type
 **🕵️ Devinette**, puis les quatre indices dans les cases prévues.
+
+## Les illustrations
+
+`supabase/maj-illustrations.sql` n'ajoute pas de questions : il **met des photos sur
+des questions déjà en banque**. Ce n'est donc pas un import CSV mais un script à
+coller dans **SQL Editor** → **Run**.
+
+Les photos viennent de Wikimedia Commons, en domaine public ou sous licence libre.
+Deux règles tenues par le script : la photo montre le **sujet** de la question,
+jamais sa réponse (sinon la question serait offerte), et le nom de l'auteur
+s'affiche en petit sous l'image, comme les licences le demandent.
+
+Pour en ajouter d'autres, complétez la liste `SUJETS` dans `scripts/illustrations.mjs`
+puis relancez `node scripts/illustrations.mjs`. Le travail déjà fait est conservé.
 
 ## En cas d'erreur « duplicate key »
 

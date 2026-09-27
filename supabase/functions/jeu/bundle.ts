@@ -459,7 +459,7 @@ function pickId(pool, level, used) {
 /* Média                                                               */
 /* ------------------------------------------------------------------ */
 
-function parseMedia(url, start, dur) {
+function parseMedia(url, start, dur, credit) {
   url = String(url || '').trim();
   if (!url) return null;
   const yt = url.match(/(?:youtu\.be\/|[?&]v=|embed\/|shorts\/|live\/)([\w-]{11})/);
@@ -473,7 +473,8 @@ function parseMedia(url, start, dur) {
   }
   // Photo : « #zoom » = gros plan qui se dézoome, « #flou » = image qui se précise
   const fx = (url.match(/#(zoom|flou)$/) || [])[1] || '';
-  return { kind: 'image', url: url.replace(/#(zoom|flou)$/, ''), fx: fx };
+  // `credit` : l'auteur et la licence de la photo, affichés en petit sous l'image
+  return { kind: 'image', url: url.replace(/#(zoom|flou)$/, ''), fx: fx, credit: String(credit || '') };
 }
 
 const SOUND_KINDS = ['youtube', 'audio'];
@@ -714,7 +715,7 @@ function loadQuestion(r, st, families) {
     id: String(r.id), theme: String(r.theme), cat: String(r.categorie || ''),
     diff: Number(r.difficulte) || 1, type: type, text: String(r.question),
     expl: String(r.explication || ''), indices: String(r.indices || ''),
-    media: parseMedia(r.media_url, r.media_debut, r.media_duree), secret: {},
+    media: parseMedia(r.media_url, r.media_debut, r.media_duree, r.media_credit), secret: {},
     epoque: String(r.epoque || ''), anecdote: String(r.anecdote || ''),
   };
   const level = st ? st.level : q.diff;
@@ -2229,7 +2230,7 @@ function createActions(db) {
 
 
 /** Version du serveur : renvoyée par l'action « time », pour vérifier ce qui est déployé. */
-const BUILD = '2026-09-27-2a41cd';
+const BUILD = '2026-09-27-43a78f';
 
 const db = createDb(
   Deno.env.get('SUPABASE_URL') ?? '',

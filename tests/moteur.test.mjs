@@ -494,6 +494,23 @@ console.log('\n8 quater. Les règles vivent dans le chapitre');
   ok(abime.duration === 120, 'une durée délirante dans un chapitre est ramenée dans les clous');
 }
 
+/* ================= 8 sexies. Photos libres et crédit de l'auteur ================= */
+console.log('\n8 sexies. Illustrations');
+{
+  const q = E.loadQuestion({ id: 'P9', theme: 'Histoire', difficulte: 2, type: 'QCM',
+    question: 'En quelle année la tour Eiffel a-t-elle été inaugurée ?', reponse: '1889',
+    choix2: '1875', choix3: '1900', choix4: '1912',
+    media_url: 'https://upload.wikimedia.org/wikipedia/commons/x/photo.jpg',
+    media_credit: 'Jebulon · CC0' }, null, {});
+  ok(q.media.kind === 'image', 'la photo est reconnue comme une image');
+  ok(q.media.credit === 'Jebulon · CC0', 'le crédit de l\'auteur accompagne la photo');
+  const pub = E.publicQuestion(q);
+  ok(pub.media.credit === 'Jebulon · CC0', 'et il arrive jusqu\'aux écrans');
+  const sans = E.loadQuestion({ id: 'P8', theme: 'T', difficulte: 1, type: 'QCM', question: 'Q ?',
+    reponse: 'A', choix2: 'B', choix3: 'C', choix4: 'D', media_url: 'https://exemple.fr/x.jpg' }, null, {});
+  ok(sans.media.credit === '', 'une photo sans crédit ne casse rien');
+}
+
 /* ================= 8 quinquies. Pause et reprise d'un extrait ================= */
 console.log('\n8 quinquies. Le son reprend après une pause');
 {

@@ -33,9 +33,9 @@ const SUJETS = [
   ['tour Eiffel', 'Eiffel Tower Paris', ['eiffel']],
   ['Joconde', 'Mona Lisa Leonardo', ['mona lisa', 'joconde']],
   ['Louvre', 'Louvre Pyramid Paris', ['louvre']],
-  ['Notre-Dame', 'Notre-Dame de Paris cathedral', ['notre']],
+  ['Notre-Dame', 'Notre-Dame de Paris cathedral exterior', ['notre']],
   ['Mont-Saint-Michel', 'Mont Saint-Michel', ['mont']],
-  ['Versailles', 'Château de Versailles facade', ['versailles']],
+  ['Versailles', 'Versailles palace chateau exterior', ['versailles']],
   ['Arc de Triomphe', 'Arc de Triomphe Paris', ['arc de triomphe']],
   ['Sacré-Cœur', 'Sacré-Cœur Montmartre basilica', ['sacre', 'sacré']],
   ['Colisée', 'Colosseum Rome', ['colosseum', 'colisee', 'colosseo']],
@@ -66,7 +66,7 @@ const SUJETS = [
   ['Bordeaux', 'Bordeaux Place de la Bourse', ['bordeaux']],
   ['Strasbourg', 'Strasbourg Petite France', ['strasbourg']],
   ['New York', 'Manhattan skyline New York', ['manhattan', 'new york']],
-  ['Tokyo', 'Tokyo skyline Shibuya', ['tokyo']],
+  ['Tokyo', 'Tokyo skyline Mount Fuji cityscape', ['tokyo']],
   ['Londres', 'London Tower Bridge', ['london', 'tower bridge']],
   ['Berlin', 'Brandenburg Gate Berlin', ['brandenburg', 'berlin']],
   ['Rio de Janeiro', 'Rio de Janeiro Sugarloaf', ['rio']],
@@ -114,21 +114,20 @@ const SUJETS = [
 
   // Sciences et espace
   ['Lune', 'Full Moon photograph', ['moon']],
-  ['Mars', 'Mars planet surface', ['mars']],
+  ['Mars', 'Mars planet globe Hubble', ['mars']],
   ['Saturne', 'Saturn planet rings', ['saturn']],
   ['Jupiter', 'Jupiter planet', ['jupiter']],
   ['Soleil', 'Sun solar surface', ['sun', 'sol']],
   ['Voie lactée', 'Milky Way night sky', ['milky way']],
   ['ADN', 'DNA double helix structure', ['dna']],
-  ['squelette', 'Human skeleton anatomy', ['skeleton']],
-  ['cerveau', 'Human brain anatomy', ['brain']],
+  ['cerveau', 'Human brain specimen photograph', ['brain']],
   ['volcan', 'Volcano eruption lava', ['volcano', 'eruption']],
   ['microscope', 'Optical microscope', ['microscope']],
   ['dinosaure', 'Tyrannosaurus skeleton museum', ['tyrannosaurus', 'dinosaur']],
 
   // Art et objets
   ['Van Gogh', 'Van Gogh Starry Night', ['starry night', 'van gogh']],
-  ['Picasso', 'Picasso Guernica museum', ['picasso']],
+  ['Picasso', 'Pablo Picasso portrait photograph', ['picasso']],
   ['Monet', 'Claude Monet Impression Sunrise', ['monet']],
   ['Michel-Ange', 'Sistine Chapel ceiling Michelangelo', ['sistine', 'michelangelo']],
   ['Cène', 'Last Supper Leonardo da Vinci', ['last supper', 'cenacolo']],
@@ -137,7 +136,7 @@ const SUJETS = [
   ['Guernica', 'Guernica Picasso', ['guernica']],
 
   // Gastronomie
-  ['croissant', 'Croissant pastry', ['croissant']],
+  ['croissant', 'Croissant pastry breakfast', ['croissant']],
   ['fromage', 'French cheese platter', ['cheese', 'fromage']],
   ['champagne', 'Champagne bottle glasses', ['champagne']],
   ['sushi', 'Sushi plate', ['sushi']],
@@ -204,7 +203,9 @@ function licenceOk(lic) {
 function utilisable(titre) {
   const t = titre.toLowerCase();
   if (/\.(svg|gif|tif|webm|ogv|pdf|xcf)$/.test(t)) return false;
-  return !/(map|carte|diagram|logo|coat of arms|flag|chart|graph|plan |blason|locator|icon|signature|stamp|timbre)/.test(t);
+  // Une image annotée ou légendée peut donner la réponse ; un schéma fait moins envie qu'une photo
+  if (/(annotated|labell?ed|infographic|lifecycle|comparison|montage|collage|-zh-|-de\.|-fr\.|schema|schéma)/.test(t)) return false;
+  return !/(map|carte|diagram|logo|coat of arms|flag|chart|graph|plan |blason|locator|icon|signature|stamp|timbre|bus |poster)/.test(t);
 }
 
 /** Cherche la meilleure image pour un sujet. */
@@ -291,15 +292,23 @@ function ecrireSql(trouvees) {
   SUJETS.forEach(([mot, recherche]) => {
     const img = trouvees[recherche];
     if (!img || !img.url) return;
-    const m = norm(mot);
+    // Mot entier, sinon « Lune » attraperait « lunettes » et « Mars » attraperait « Marseille »
+    const motif = new RegExp('(^|[^a-z0-9])' + norm(mot).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z0-9]|$)');
     const cibles = banque.filter(r => {
       if (dejaPris.has(r.id)) return false;
       if (String(r.media_url || '').trim()) return false;          // déjà illustrée
       if (String(r.type).toUpperCase() === 'CARTE') return false;   // la carte est déjà le support
-      if (norm(r.question).indexOf(m) < 0) return false;            // le sujet doit être dans la question
+      if (String(r.type).toUpperCase() === 'INDICE') return false;  // la devinette se joue sur ses indices
+      // « Quel est ce fromage ? » attend une photo DE la réponse : on n'y touche pas
+      if (/^[^a-zA-Z0-9]|📸|🕵️|🎵|🎬/.test(String(r.question).trim().charAt(0) + String(r.question))) return false;
+      if (/\b(quel|quelle|quels|quelles)\s+(est|sont)\s+(ce|cet|cette|ces)\b|\bqui\s+est\s+(ce|cet|cette)\b/
+        .test(norm(r.question))) return false;
+      if (!motif.test(norm(r.question))) return false;              // le sujet doit être dans la question
       // jamais illustrer la réponse : ce serait offrir la question
-      if (norm(r.reponse).indexOf(m) >= 0) return false;
-      if ([r.choix2, r.choix3, r.choix4].some(c => norm(c || '').indexOf(m) >= 0)) return false;
+      if (motif.test(norm(r.reponse))) return false;
+      if ([r.choix2, r.choix3, r.choix4].some(c => motif.test(norm(c || '')))) return false;
+      // pour une devinette, les indices comptent aussi comme la réponse
+      if (String(r.type).toUpperCase() === 'INDICE' && motif.test(norm(r.choix2 || ''))) return false;
       return true;
     });
     if (!cibles.length) return;
@@ -309,7 +318,7 @@ function ecrireSql(trouvees) {
     lignes.push(`update questions set media_url = '${img.url.replace(/'/g, "''")}', `
       + `media_credit = '${credit.replace(/'/g, "''")}' where id in (`
       + cibles.map(r => `'${r.id}'`).join(', ') + ');');
-    resume.push({ mot: mot, n: cibles.length, titre: img.titre });
+    resume.push({ mot: mot, n: cibles.length, titre: img.titre, exemples: cibles.slice(0, 3).map(r => r.question) });
   });
 
   const sql = `-- Illustrations libres (Wikimedia Commons) ajoutées aux questions existantes.
