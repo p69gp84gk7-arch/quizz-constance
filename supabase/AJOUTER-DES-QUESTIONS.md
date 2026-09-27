@@ -24,6 +24,7 @@ Les questions déjà présentes ne sont jamais touchées : seules les nouvelles 
 | `questions-devinettes.csv` | 65 devinettes à 4 indices (38 personnalités, des lieux, des films, des animaux) |
 | `questions-citations.csv` | 70 questions du thème « Citations & expressions » : proverbes à trou, phrases célèbres, sens d'expressions |
 | `questions-nouveaux-themes.csv` | 108 questions dans 8 nouveaux thèmes (mythologie, espace, corps humain, inventions, séries, marques, contes, transports) |
+| `questions-complement.csv` | 734 questions de plus : chacun des 9 nouveaux thèmes atteint 100 questions |
 
 Importez-les l'un après l'autre : l'ordre n'a pas d'importance.
 

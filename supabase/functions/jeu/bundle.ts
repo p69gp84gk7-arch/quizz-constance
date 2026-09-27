@@ -227,9 +227,13 @@ const clamp = (v, a, b, d) => { v = Number(v); return isNaN(v) ? d : Math.max(a,
 /* Réglages                                                            */
 /* ------------------------------------------------------------------ */
 
-/** Réglages qu'un chapitre peut redéfinir pour lui seul. */
-const REGLES_CHAPITRE = ['duration', 'points', 'estimation', 'margePct', 'estimQcm', 'choix',
-  'pieges', 'saisie', 'saisieNiveau', 'joker', 'bonus', 'autoReveal'];
+/**
+ * Réglages qu'un chapitre peut redéfinir pour lui seul : le rythme et la façon
+ * de répondre. Les points, la révélation, les questions en or et le joker restent
+ * des règles de la partie entière — sinon le classement final n'aurait plus de sens.
+ */
+const REGLES_CHAPITRE = ['duration', 'estimation', 'margePct', 'estimQcm', 'choix',
+  'pieges', 'saisie', 'saisieNiveau'];
 
 function normalizeSettings(s) {
   s = s || {};
@@ -312,7 +316,6 @@ function rules(st) {
   out.saisieNiveau = clamp(out.saisieNiveau, 2, 5, s.saisieNiveau);
   if (out.choix !== 'fixes' && out.choix !== 'adaptatifs') out.choix = s.choix;
   if (['auto', 'nets', 'proches'].indexOf(out.pieges) < 0) out.pieges = s.pieges;
-  if (POINTS.indexOf(out.points) < 0) out.points = s.points;
   if (['libre', 'qcm', 'mixte', 'auto'].indexOf(out.estimQcm) < 0) out.estimQcm = s.estimQcm;
   if (['auto', 'jamais', 'toujours'].indexOf(out.saisie) < 0) out.saisie = s.saisie;
   if (out.estimation !== 'proche' && out.estimation !== 'marge') out.estimation = s.estimation;
@@ -2230,7 +2233,7 @@ function createActions(db) {
 
 
 /** Version du serveur : renvoyée par l'action « time », pour vérifier ce qui est déployé. */
-const BUILD = '2026-09-27-43a78f';
+const BUILD = '2026-09-27-551f08';
 
 const db = createDb(
   Deno.env.get('SUPABASE_URL') ?? '',

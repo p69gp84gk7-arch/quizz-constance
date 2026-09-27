@@ -575,7 +575,7 @@ const INTITULE = {
   'Monument': '🕵️ Quel est ce monument ?',
   'Œuvre': '🕵️ Quelle est cette œuvre ?',
   'Plat': '🕵️ Quel est ce plat ?',
-  'Fromage': '🕵️ Quel est ce fromage ?',
+  'Fromage': '🕵️ De quel fromage s\'agit-il ?',
   'Boisson': '🕵️ Quelle est cette boisson ?',
   'Événement': '🕵️ De quel événement s\'agit-il ?',
 };

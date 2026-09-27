@@ -583,8 +583,8 @@ console.log('\n8 septies. Accord entre le moteur et le schéma de la base');
 
   // et aucun fichier livré ne doit utiliser un type refusé
   const types = new Set();
-  ['questions', 'questions-repliques', 'questions-dates', 'questions-devinettes',
-    'questions-citations', 'questions-nouveaux-themes'].forEach(f => {
+  ['questions', 'questions-repliques', 'questions-blindtest', 'questions-dates', 'questions-devinettes',
+    'questions-citations', 'questions-nouveaux-themes', 'questions-complement'].forEach(f => {
     const chemin = path.join(ROOT, 'supabase/' + f + '.csv');
     if (!fs.existsSync(chemin)) return;
     parseCsv(fs.readFileSync(chemin, 'utf8')).forEach(r => { if (r.type) types.add(String(r.type).trim()); });
